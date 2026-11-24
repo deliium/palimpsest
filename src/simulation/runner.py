@@ -771,6 +771,7 @@ class _ChannelLoopOptions(TypedDict, total=False):
     bounded_experimentation_spec: object | None
     measurement_enabled: bool
     medical_beliefs_enabled: bool
+    overexploitation_inference_enabled: bool
 
 
 def _channel_loop_kwargs(config: object) -> _ChannelLoopOptions:
@@ -793,6 +794,7 @@ def _channel_loop_kwargs(config: object) -> _ChannelLoopOptions:
         _bounded_experimentation_loop_kwargs,
         _measurement_loop_kwargs,
         _medical_beliefs_loop_kwargs,
+        _overexploitation_inference_loop_kwargs,
     ):
         options.update(factory(config))
     return options
@@ -1016,6 +1018,18 @@ def _medical_beliefs_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Enable owner medical beliefs only when the exact v59 spec is present."""
     return {
         "medical_beliefs_enabled": getattr(config, "medical_beliefs", None)
+        is not None
+    }
+
+
+def _overexploitation_inference_loop_kwargs(config: object) -> _ChannelLoopOptions:
+    """Enable ephemeral owner pressure inference only for active v61 runs.
+
+    Default-off: absent ``overexploitation`` keeps the boolean false. Built-in
+    loops only; custom injected loops are unchanged.
+    """
+    return {
+        "overexploitation_inference_enabled": getattr(config, "overexploitation", None)
         is not None
     }
 
@@ -2866,6 +2880,7 @@ class SimulationRunner:
                     if config.v4_capability_flags.ecological_feedback
                     else None
                 ),
+                overexploitation_active=config.overexploitation is not None,
             )
             _LOG.debug(
                 "artifact_write_pair_inputs artifacts_active=%s "
@@ -7665,7 +7680,56 @@ def _engine_snapshot(
         measurement_active=bool(state.instrument_states),
         disease_active=engine._disease_mechanics is not None,
         ecological_feedback_active=engine._ecological_resources is not None,
+        overexploitation_active=engine._overexploitation_active,
     )
+    if codec_version == "v27":
+        from dataclasses import replace as _dc_replace
+
+        from simulation.overexploitation_checkpoint import (
+            build_v27_checkpoint_extensions,
+        )
+        from world.kinship import KinshipGraph
+
+        kinship_graph = engine.kinship_graph
+        kinship_edges = (
+            kinship_graph.edges if type(kinship_graph) is KinshipGraph else ()
+        )
+        assert engine._environmental_dynamics is not None
+        v27_rows = build_v27_checkpoint_extensions(
+            state=state,
+            lifecycle_records=tuple(engine.lifecycle_records),
+            kinship_edges=kinship_edges,
+            dependency_need_registers=tuple(
+                engine._dependency_need_registers.values()
+            ),
+            environmental_dynamics=engine._environmental_dynamics,
+            disease_spec=engine._disease_mechanics,
+            travel_network_active=engine.travel_network_active,
+        )
+        draft = WorldSnapshot(
+            snapshot_id=snapshot_id,
+            run_id=engine.run_id,
+            world_id=engine.world_id,
+            seed=engine._config.seed,
+            config=engine._config,
+            registrations=engine._registrations,
+            locations=tuple(engine._snapshot.world.state.locations.values()),
+            bodies=tuple(engine._snapshot.world.state.bodies.values()),
+            items=tuple(engine._snapshot.world.state.items.values()),
+            resources=tuple(engine._snapshot.world.state.resources.values()),
+            weather=tuple(engine._snapshot.world.state.weather.values()),
+            next_tick=next_tick,
+            revision=engine.revision,
+            event_schema_version=schema_version,
+            projector_version=PROJECTOR_VERSION,
+            persistence_codec_version=codec_version,
+            derivation_version=engine._config.derivation_version
+            or DERIVATION_VERSION_V3,
+            integrity_hash=PayloadHash("a" * 64),
+            predecessor_commit_hash=predecessor_commit_hash,
+            **v27_rows,
+        )
+        return _dc_replace(draft, integrity_hash=hash_snapshot(draft))
     production_rows: SnapshotExtensions = {}
     if codec_version in {
         "v3",
@@ -7961,50 +8025,9 @@ def _engine_snapshot(
         predecessor_commit_hash=predecessor_commit_hash,
         **production_rows,
     )
-    return WorldSnapshot(
-        snapshot_id=draft.snapshot_id,
-        run_id=draft.run_id,
-        world_id=draft.world_id,
-        seed=draft.seed,
-        config=draft.config,
-        registrations=draft.registrations,
-        locations=draft.locations,
-        bodies=draft.bodies,
-        items=draft.items,
-        resources=draft.resources,
-        weather=draft.weather,
-        next_tick=draft.next_tick,
-        revision=draft.revision,
-        event_schema_version=draft.event_schema_version,
-        projector_version=draft.projector_version,
-        persistence_codec_version=draft.persistence_codec_version,
-        derivation_version=draft.derivation_version,
-        integrity_hash=hash_snapshot(draft),
-        predecessor_commit_hash=draft.predecessor_commit_hash,
-        structures=draft.structures,
-        production_jobs=draft.production_jobs,
-        tool_marks=draft.tool_marks,
-        active_hazards=draft.active_hazards,
-        artifacts=draft.artifacts,
-        lifecycle_records=draft.lifecycle_records,
-        kinship_edges=getattr(draft, "kinship_edges", ()),
-        dependency_need_registers=getattr(draft, "dependency_need_registers", ()),
-        repositories=getattr(draft, "repositories", ()),
-        corpse_custody_item_ids=getattr(draft, "corpse_custody_item_ids", ()),
-        exchange_offers=getattr(draft, "exchange_offers", ()),
-        collective_projects=getattr(draft, "collective_projects", ()),
-        regions_migration=draft.regions_migration,
-        journeys=draft.journeys,
-        infrastructure=getattr(draft, "infrastructure", None),
-        travel_network=getattr(draft, "travel_network", None),
-        instrument_states=getattr(draft, "instrument_states", ()),
-        measurement_references=getattr(
-            draft, "measurement_references", ()
-        ),
-        disease_mechanics=getattr(draft, "disease_mechanics", None),
-        ecological_resources=getattr(draft, "ecological_resources", None),
-        environmental_dynamics=getattr(draft, "environmental_dynamics", None),
-    )
+    from dataclasses import replace as _dc_replace_final
+
+    return _dc_replace_final(draft, integrity_hash=hash_snapshot(draft))
 
 
 def _blank_slate_counts(cognitive_loop: object) -> BlankSlateStoreCounts:

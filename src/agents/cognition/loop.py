@@ -299,6 +299,7 @@ class CognitiveLoop:
     _measurement_enabled: bool
     _medical_belief_ledger: object | None
     _medical_beliefs_enabled: bool
+    _overexploitation_inference_enabled: bool
 
     __slots__ = (
         "_acceptance_window_ticks",
@@ -397,6 +398,7 @@ class CognitiveLoop:
         "_organization_operation_policy",
         "_organized_conflict_mode",
         "_organized_conflict_policy",
+        "_overexploitation_inference_enabled",
         "_perception",
         "_planner",
         "_possession_succession_active",
@@ -531,6 +533,7 @@ class CognitiveLoop:
         bounded_experimentation_spec: object | None = None,
         measurement_enabled: bool = False,
         medical_beliefs_enabled: bool = False,
+        overexploitation_inference_enabled: bool = False,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         borders_mode: object | None = None,
@@ -1248,6 +1251,11 @@ class CognitiveLoop:
         if type(medical_beliefs_enabled) is not bool:
             raise TypeError("medical_beliefs_enabled must be bool")
         self._medical_beliefs_enabled = medical_beliefs_enabled
+        if type(overexploitation_inference_enabled) is not bool:
+            raise TypeError("overexploitation_inference_enabled must be bool")
+        self._overexploitation_inference_enabled = (
+            overexploitation_inference_enabled
+        )
         from agents.cognition.configuration import CognitionDisputeMode
         from agents.cognition.legal_disputes import (
             DisputePolicy,
@@ -8233,6 +8241,16 @@ class CognitiveLoop:
                         cause=intervention.cause,
                         practice=intervention.practice,
                     )
+        local_pressure_hypotheses = None
+        if self._overexploitation_inference_enabled:
+            from agents.cognition.overexploitation_inference import (
+                infer_local_extraction_pressure,
+            )
+
+            local_pressure_hypotheses = infer_local_extraction_pressure(
+                loop_input.agent_id,
+                loop_input.observation,
+            )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -8310,6 +8328,7 @@ class CognitiveLoop:
             medical_belief_ledger=medical_candidate,
             scientific_model_ledger=scientific_model_candidate,
             competing_theory_ledger=competing_theory_candidate,
+            local_pressure_hypotheses=local_pressure_hypotheses,
         )
         _LOG.debug(
             "cognitive_loop_complete",

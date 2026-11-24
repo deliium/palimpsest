@@ -87,7 +87,7 @@ def test_version_pins_are_unchanged() -> None:
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(get_args(AgentCommand)) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS

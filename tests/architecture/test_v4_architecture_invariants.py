@@ -169,13 +169,14 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert EVENT_SCHEMA_REPLAY_V23 == 23
     assert EVENT_SCHEMA_REPLAY_V25 == 25
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v26" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v27" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert METRIC_FAMILY_COUNT == 275
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
@@ -303,10 +304,11 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
 def test_reservations_and_prerequisite_graph() -> None:
     validate_write_pair_reservations()
     validate_deepening_write_pairs()
-    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28]
+    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28, 29]
     assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == [
         "v25",
         "v26",
+        "v27",
     ]
     reserved = {item.context_id for item in V4_WRITE_PAIR_RESERVATIONS}
     deepened = {pair.context_id for pair in V4_DEEPENING_WRITE_PAIRS}

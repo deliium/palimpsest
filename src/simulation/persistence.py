@@ -74,6 +74,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V25,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
+    EVENT_SCHEMA_REPLAY_V29,
     WorldEvent,
     normalize_events,
 )
@@ -157,6 +158,7 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
@@ -187,6 +189,7 @@ ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
         "v23",
         "v25",
         "v26",
+        "v27",
     }
 )
 
@@ -306,14 +309,34 @@ def checkpoint_schema_for_production(
     measurement_active: bool = False,
     disease_active: bool = False,
     ecological_feedback_active: bool = False,
+    overexploitation_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    Priority: ecology → ``(25, v23)``; else disease → ``(24, v22)``;
-    else measurement → ``(28, v26)``; else travel → ``(27, v25)``;
-    else infrastructure → ``(23, v21)``; …
+    Priority: overexploitation → ``(29, v27)``; else ecology → ``(25, v23)``;
+    else disease → ``(24, v22)``; else measurement → ``(28, v26)``;
+    else travel → ``(27, v25)``; else infrastructure → ``(23, v21)``; …
     Schema numbers are not capability order.
     """
+    if overexploitation_active:
+        if not ecological_feedback_active:
+            raise ValueError("overexploitation_requires_ecological_feedback")
+        from simulation.versioning import (
+            OVEREXPLOITATION_WRITE_PAIR_CODEC,
+            OVEREXPLOITATION_WRITE_PAIR_EVENT,
+        )
+
+        pair = (
+            OVEREXPLOITATION_WRITE_PAIR_EVENT,
+            OVEREXPLOITATION_WRITE_PAIR_CODEC,
+        )
+        _LOG.info(
+            "checkpoint_schema_selected schema_version=%s codec=%s "
+            "reason=overexploitation_active",
+            pair[0],
+            pair[1],
+        )
+        return pair
     if ecological_feedback_active:
         from simulation.versioning import (
             ECOLOGY_WRITE_PAIR_CODEC,
@@ -565,6 +588,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         return projector_version == "v2"
     return False
@@ -878,8 +902,12 @@ class WorldSnapshot:
                 raise ValueError(
                     f"codec {self.persistence_codec_version} requires regions_migration"
                 )
-        elif self.persistence_codec_version == "v26":
-            pass
+        elif self.persistence_codec_version in {"v22", "v23", "v26", "v27"}:
+            if (self.regions_migration is None) != (journey_rows is None):
+                raise ValueError(
+                    f"codec {self.persistence_codec_version} regions_migration and "
+                    "journeys must both be set or both absent"
+                )
         elif self.regions_migration is not None or journey_rows is not None:
             raise ValueError("regional migration checkpoint fields require codec v19")
         object.__setattr__(self, "journeys", journey_rows)
@@ -894,7 +922,7 @@ class WorldSnapshot:
             infra_rows = tuple(self.infrastructure)
             if any(type(item) is not InfrastructureAsset for item in infra_rows):
                 raise TypeError("infrastructure entries must be InfrastructureAsset")
-        if self.persistence_codec_version in {"v21", "v25", "v26"}:
+        if self.persistence_codec_version in {"v21", "v25", "v26", "v27"}:
             if infra_rows is None:
                 raise ValueError(
                     f"codec {self.persistence_codec_version} requires "
@@ -931,7 +959,7 @@ class WorldSnapshot:
                 and self.regions_migration is None
             ):
                 raise ValueError("travel_network_checkpoint_requires_regions")
-        elif self.persistence_codec_version in {"v22", "v23"}:
+        elif self.persistence_codec_version in {"v22", "v23", "v27"}:
             pass
         elif route_rows is not None:
             raise ValueError("travel_network_checkpoint_fields_require_codec_v25")
@@ -963,7 +991,7 @@ class WorldSnapshot:
         if self.persistence_codec_version == "v26":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V28:
                 raise ValueError("codec v26 requires event schema 28")
-        elif self.persistence_codec_version in {"v22", "v23"}:
+        elif self.persistence_codec_version in {"v22", "v23", "v27"}:
             pass
         elif instrument_rows or reference_rows:
             raise ValueError(
@@ -1007,17 +1035,51 @@ class WorldSnapshot:
                     raise TypeError(
                         "v23 disease_mechanics must be DiseaseCheckpointSection"
                     )
+        elif self.persistence_codec_version == "v27":
+            from simulation.ecological_resources_checkpoint import (
+                EcologicalResourcesCheckpointSection,
+            )
+            from simulation.versioning import (
+                OVEREXPLOITATION_WRITE_PAIR_EVENT,
+            )
+
+            if self.event_schema_version != OVEREXPLOITATION_WRITE_PAIR_EVENT:
+                raise ValueError("codec v27 requires event schema 29")
+            if self.projector_version != "v2":
+                raise ValueError("codec v27 requires projector v2")
+            if (
+                type(self.ecological_resources)
+                is not EcologicalResourcesCheckpointSection
+            ):
+                raise TypeError(
+                    "codec v27 requires EcologicalResourcesCheckpointSection"
+                )
+            if type(self.environmental_dynamics) is not EnvironmentalDynamicsSpec:
+                raise TypeError("codec v27 requires EnvironmentalDynamicsSpec")
+            if infra_rows is None:
+                raise ValueError("codec v27 requires infrastructure channel rows")
+            if self.disease_mechanics is not None:
+                from simulation.disease_checkpoint import DiseaseCheckpointSection
+
+                if type(self.disease_mechanics) is not DiseaseCheckpointSection:
+                    raise TypeError(
+                        "v27 disease_mechanics must be DiseaseCheckpointSection"
+                    )
         elif self.disease_mechanics is not None:
             raise ValueError("disease_mechanics checkpoint requires codec v22")
         elif self.ecological_resources is not None:
-            raise ValueError("ecological_resources checkpoint requires codec v23")
+            raise ValueError(
+                "ecological_resources checkpoint requires codec v23 or v27"
+            )
         elif self.environmental_dynamics is not None:
-            raise ValueError("environmental_dynamics checkpoint requires codec v23")
+            raise ValueError(
+                "environmental_dynamics checkpoint requires codec v23 or v27"
+            )
         # Reuse bootstrap graph validation and ordered copying (inventory order
         # is preserved inside AgentBody).
         ecology_bootstrap = None
         ecology_digest = None
-        if self.persistence_codec_version == "v23":
+        if self.persistence_codec_version in {"v23", "v27"}:
             assert self.ecological_resources is not None
             from simulation.bootstrap import (
                 _ecological_digest_from_snapshot,
@@ -1229,6 +1291,7 @@ class WorldSnapshot:
                 "v23",
                 "v25",
                 "v26",
+                "v27",
             }
             and self.active_hazards
         ):
@@ -1257,6 +1320,7 @@ class WorldSnapshot:
                 "v23",
                 "v25",
                 "v26",
+                "v27",
             }
             and self.artifacts
         ):
@@ -1295,6 +1359,7 @@ class WorldSnapshot:
                 "v23",
                 "v25",
                 "v26",
+                "v27",
             }
             and records
         ):
@@ -1331,6 +1396,7 @@ class WorldSnapshot:
                 "v23",
                 "v25",
                 "v26",
+                "v27",
             }
             and kinship_rows
         ):
@@ -1368,6 +1434,7 @@ class WorldSnapshot:
                 "v23",
                 "v25",
                 "v26",
+                "v27",
             }
             and need_rows
         ):
@@ -1400,6 +1467,7 @@ class WorldSnapshot:
                 "v23",
                 "v25",
                 "v26",
+                "v27",
             }
             and repo_rows
         ):
@@ -1431,6 +1499,7 @@ class WorldSnapshot:
                 "v23",
                 "v25",
                 "v26",
+                "v27",
             }
             and custody_ids
         ):
@@ -1460,6 +1529,7 @@ class WorldSnapshot:
                 "v23",
                 "v25",
                 "v26",
+                "v27",
             }
             and offer_rows
         ):
@@ -1476,11 +1546,19 @@ class WorldSnapshot:
                 raise TypeError("collective_projects entries must be CollectiveProject")
             project_rows.append(raw)
         object.__setattr__(self, "collective_projects", tuple(project_rows))
-        if (
-            self.persistence_codec_version
-            not in {"v17", "v18", "v19", "v20", "v21", "v22", "v23", "v25", "v26"}
-            and project_rows
-        ):
+        _collective_codecs = {
+            "v17",
+            "v18",
+            "v19",
+            "v20",
+            "v21",
+            "v22",
+            "v23",
+            "v25",
+            "v26",
+            "v27",
+        }
+        if self.persistence_codec_version not in _collective_codecs and project_rows:
             _LOG.warning(
                 "collective_projects present on pre-v17 payload codec=%s "
                 "project_count=%s",
@@ -1498,6 +1576,7 @@ class WorldSnapshot:
             "v23",
             "v25",
             "v26",
+            "v27",
         }:
             for structure in self.structures:
                 if structure.kind in {StructureKind.BRIDGE, StructureKind.RECORD_SITE}:
@@ -1516,6 +1595,7 @@ class WorldSnapshot:
             "v23",
             "v25",
             "v26",
+            "v27",
         }:
             for structure in self.structures:
                 if structure.kind in {StructureKind.WELL, StructureKind.WARNING_POST}:
@@ -1526,7 +1606,15 @@ class WorldSnapshot:
                     )
                     raise ValueError("well and warning_post require codec v18")
 
-        if self.persistence_codec_version not in {"v21", "v22", "v23", "v25", "v26"}:
+        _infra_structure_codecs = {
+            "v21",
+            "v22",
+            "v23",
+            "v25",
+            "v26",
+            "v27",
+        }
+        if self.persistence_codec_version not in _infra_structure_codecs:
             for structure in self.structures:
                 if structure.kind in {
                     StructureKind.ROAD,
@@ -1560,6 +1648,7 @@ class WorldSnapshot:
             "v23",
             "v25",
             "v26",
+            "v27",
         }:
             custody_count = sum(
                 1

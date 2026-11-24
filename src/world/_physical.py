@@ -33,6 +33,7 @@ from world.events import (
     ExposureApplied,
     NeedsApplied,
     OccurrenceContext,
+    ResourcePressureRecorded,
     ResourceRegenerated,
     SeasonChanged,
     TemperatureBandChanged,
@@ -209,6 +210,7 @@ def apply_autonomous_physical_step(
     public_goods_active: bool = False,
     ecological_parameters: Mapping[EntityId, tuple[int, int]] | None = None,
     ecological_tick_start_quantities: Mapping[EntityId, float] | None = None,
+    overexploitation_active: bool = False,
 ) -> PendingSystemStep:
     """Apply weather, regeneration, metabolism, and exposure in canonical order.
 
@@ -243,6 +245,8 @@ def apply_autonomous_physical_step(
         raise TypeError(
             "environmental_dynamics must be EnvironmentalDynamicsSpec or None"
         )
+    if type(overexploitation_active) is not bool:
+        raise TypeError("overexploitation_active must be bool")
     ecology_rows = state.ecological_resources
     if ecology_rows is None:
         if (
@@ -250,6 +254,8 @@ def apply_autonomous_physical_step(
             or ecological_tick_start_quantities is not None
         ):
             raise ValueError("ecological_pressure_without_channel")
+        if overexploitation_active:
+            raise ValueError("overexploitation_requires_ecological_channel")
         ecology_params: Mapping[EntityId, tuple[int, int]] | None = None
         ecology_starts: Mapping[EntityId, float] | None = None
     else:
@@ -383,10 +389,12 @@ def apply_autonomous_physical_step(
             None if ecology_working is None else ecology_working.get(resource_id)
         )
         capacity_cap = resource.maximum_quantity
+        overexploitation_renewal: float | None = None
         if managed_row is not None:
             assert ecology_working is not None
             assert ecology_params is not None and ecology_starts is not None
             from world._ecological_resources import (
+                advance_overexploitation,
                 advance_stock_damage,
                 effective_capacity_tenths,
             )
@@ -404,22 +412,62 @@ def apply_autonomous_physical_step(
             post_tenths = _exact_physical_tenths(
                 resource.quantity, code="ecological_post_grid_invalid"
             )
-            next_row = advance_stock_damage(
-                managed_row,
-                baseline_tenths=baseline_tenths,
-                start_quantity_tenths=start_tenths,
-                post_command_quantity_tenths=post_tenths,
-                allowance_tenths=allowance_tenths,
-                recovery_tenths=recovery_tenths,
-            )
-            if next_row.damage_tenths != managed_row.damage_tenths:
+            if overexploitation_active:
+                rate_h = resource.regeneration_per_tick
+                shortage_h = False
+                if spec is not None:
+                    season_h = spec.season_at(tick_value)
+                    try:
+                        multiplier_h = spec.multiplier_for(resource.kind, season_h)
+                    except ValueError as exc:
+                        if "yield_undefined" in str(exc):
+                            raise ValueError("yield_undefined") from exc
+                        raise
+                    rate_h = round_physical(
+                        resource.regeneration_per_tick * multiplier_h
+                    )
+                    shortage_h = spec.shortage_suppresses(resource.kind, tick_value)
+                    if shortage_h:
+                        rate_h = 0.0
+                if shortage_h:
+                    rate_h = 0.0
+                elif working.infrastructure is not None:
+                    from world._infrastructure import effective_resource_regen_delta
+
+                    regen_delta_h = effective_resource_regen_delta(
+                        working.infrastructure,
+                        location_id=resource.location_id,
+                    )
+                    if regen_delta_h != 0.0:
+                        rate_h = round_physical(rate_h + regen_delta_h)
+                    if rate_h < 0.0:
+                        rate_h = 0.0
+                healthy_tenths = _exact_physical_tenths(
+                    rate_h, code="ecological_healthy_grid_invalid"
+                )
+                if healthy_tenths > baseline_tenths:
+                    healthy_tenths = baseline_tenths
+                advance = advance_overexploitation(
+                    managed_row,
+                    baseline_tenths=baseline_tenths,
+                    start_quantity_tenths=start_tenths,
+                    post_command_quantity_tenths=post_tenths,
+                    allowance_tenths=allowance_tenths,
+                    recovery_tenths=recovery_tenths,
+                    healthy_potential_tenths=healthy_tenths,
+                )
+                next_row = advance.row
+                overexploitation_renewal = round_physical(
+                    advance.renewal_tenths / 10.0
+                )
                 ecology_working[resource_id] = next_row
-                ecology_changed = True
-                semantic_mutation = True
-                if next_row.damage_tenths > managed_row.damage_tenths:
-                    ecology_damaged += 1
-                else:
-                    ecology_restored += 1
+                if next_row.damage_tenths != managed_row.damage_tenths:
+                    ecology_changed = True
+                    semantic_mutation = True
+                    if next_row.damage_tenths > managed_row.damage_tenths:
+                        ecology_damaged += 1
+                    else:
+                        ecology_restored += 1
                 ordinal = family_ordinals[SystemEffectFamily.REGENERATION]
                 family_ordinals[SystemEffectFamily.REGENERATION] = ordinal + 1
                 pending.append(
@@ -427,21 +475,117 @@ def apply_autonomous_physical_step(
                         effect_family=SystemEffectFamily.REGENERATION,
                         entity_id=resource_id,
                         family_ordinal=ordinal,
-                        details=EcologicalResourceChanged(
+                        details=ResourcePressureRecorded(
                             resource_id=resource_id,
+                            start_tenths=start_tenths,
+                            post_action_tenths=post_tenths,
+                            healthy_potential_tenths=advance.healthy_potential_tenths,
+                            effective_potential_tenths=(
+                                advance.effective_potential_tenths
+                            ),
+                            damage_threshold_tenths=(
+                                advance.pressure_tolerance_tenths
+                            ),
                             before_damage_tenths=managed_row.damage_tenths,
                             after_damage_tenths=next_row.damage_tenths,
+                            regenerated_tenths=advance.renewal_tenths,
                         ),
                         origin_location_id=resource.location_id,
                     )
                 )
+                capacity_tenths = effective_capacity_tenths(
+                    next_row, baseline_tenths=baseline_tenths
+                )
+                capacity_cap = round_physical(capacity_tenths / 10.0)
+                managed_row = next_row
             else:
-                ecology_working[resource_id] = next_row
-            capacity_tenths = effective_capacity_tenths(
-                next_row, baseline_tenths=baseline_tenths
+                next_row = advance_stock_damage(
+                    managed_row,
+                    baseline_tenths=baseline_tenths,
+                    start_quantity_tenths=start_tenths,
+                    post_command_quantity_tenths=post_tenths,
+                    allowance_tenths=allowance_tenths,
+                    recovery_tenths=recovery_tenths,
+                )
+                if next_row.damage_tenths != managed_row.damage_tenths:
+                    ecology_working[resource_id] = next_row
+                    ecology_changed = True
+                    semantic_mutation = True
+                    if next_row.damage_tenths > managed_row.damage_tenths:
+                        ecology_damaged += 1
+                    else:
+                        ecology_restored += 1
+                    ordinal = family_ordinals[SystemEffectFamily.REGENERATION]
+                    family_ordinals[SystemEffectFamily.REGENERATION] = ordinal + 1
+                    pending.append(
+                        _pending_system(
+                            effect_family=SystemEffectFamily.REGENERATION,
+                            entity_id=resource_id,
+                            family_ordinal=ordinal,
+                            details=EcologicalResourceChanged(
+                                resource_id=resource_id,
+                                before_damage_tenths=managed_row.damage_tenths,
+                                after_damage_tenths=next_row.damage_tenths,
+                            ),
+                            origin_location_id=resource.location_id,
+                        )
+                    )
+                else:
+                    ecology_working[resource_id] = next_row
+                capacity_tenths = effective_capacity_tenths(
+                    next_row, baseline_tenths=baseline_tenths
+                )
+                capacity_cap = round_physical(capacity_tenths / 10.0)
+                managed_row = next_row
+
+        if overexploitation_renewal is not None:
+            resulting = round_physical(
+                resource.quantity + overexploitation_renewal
             )
-            capacity_cap = round_physical(capacity_tenths / 10.0)
-            managed_row = next_row
+            resulting = min(resulting, capacity_cap)
+            resulting = round_physical(resulting)
+            if resulting != resource.quantity:
+                resources[resource_id] = copy_resource(resource, quantity=resulting)
+                resources_changed = True
+                semantic_mutation = True
+                ordinal = family_ordinals[SystemEffectFamily.REGENERATION]
+                family_ordinals[SystemEffectFamily.REGENERATION] = ordinal + 1
+                pending.append(
+                    _pending_system(
+                        effect_family=SystemEffectFamily.REGENERATION,
+                        entity_id=resource_id,
+                        family_ordinal=ordinal,
+                        details=ResourceRegenerated(
+                            resource_id=resource_id,
+                            quantity_delta=round_physical(
+                                resulting - resource.quantity
+                            ),
+                            resulting_quantity=resulting,
+                        ),
+                        origin_location_id=resource.location_id,
+                    )
+                )
+                if spec is not None:
+                    witness = node_quantity_witness(
+                        resource_id, resource.quantity, resulting
+                    )
+                    if witness is not None:
+                        node_ordinal = family_ordinals[
+                            SystemEffectFamily.RESOURCE_NODE
+                        ]
+                        family_ordinals[SystemEffectFamily.RESOURCE_NODE] = (
+                            node_ordinal + 1
+                        )
+                        pending.append(
+                            _pending_system(
+                                effect_family=SystemEffectFamily.RESOURCE_NODE,
+                                entity_id=resource_id,
+                                family_ordinal=node_ordinal,
+                                details=witness,
+                                origin_location_id=resource.location_id,
+                            )
+                        )
+            continue
 
         rate = resource.regeneration_per_tick
         shortage = False

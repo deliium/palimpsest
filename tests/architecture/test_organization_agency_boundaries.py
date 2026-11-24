@@ -215,7 +215,7 @@ def test_v4_reservations_observer_and_migration_are_unchanged() -> None:
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert next_revision() == "0018"
 

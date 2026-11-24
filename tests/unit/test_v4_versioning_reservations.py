@@ -27,7 +27,7 @@ from simulation.versioning import (
 )
 from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
-    EVENT_SCHEMA_REPLAY_V28,
+    EVENT_SCHEMA_REPLAY_V29,
 )
 
 pytestmark = pytest.mark.unit
@@ -50,15 +50,17 @@ def test_reservations_validate_and_span_23_to_26() -> None:
 
 
 def test_current_wire_maxima_are_unchanged() -> None:
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == EVENT_SCHEMA_REPLAY_V28 == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == EVENT_SCHEMA_REPLAY_V29 == 29
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v26" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v27" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V23")
     assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V24")
+    assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V29")
 
 
 def test_deepening_pair_is_separate_and_contiguous() -> None:
@@ -75,10 +77,11 @@ def test_deepening_pair_is_separate_and_contiguous() -> None:
         "v23",
         "v24",
     ]
-    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28]
+    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28, 29]
     assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == [
         "v25",
         "v26",
+        "v27",
     ]
     assert TRAVEL_NETWORK_WRITE_PAIR_EVENT == 27
     assert TRAVEL_NETWORK_WRITE_PAIR_CODEC == "v25"
@@ -100,11 +103,11 @@ def test_deepening_pair_mutations_are_rejected() -> None:
         validate_deepening_write_pairs((replace(pair, codec_version="v21"),))
     with pytest.raises(ValueError, match="v4_deepening_pair_noncontiguous_event"):
         validate_deepening_write_pairs(
-            (pair, replace(pair, event_schema=29, codec_version="v27"))
+            (pair, replace(pair, event_schema=30, codec_version="v28"))
         )
     with pytest.raises(ValueError, match="v4_deepening_pair_noncontiguous_codec"):
         validate_deepening_write_pairs(
-            (pair, replace(pair, event_schema=28, codec_version="v27"))
+            (pair, replace(pair, event_schema=28, codec_version="v28"))
         )
     with pytest.raises(ValueError, match="v4_deepening_pair_unknown_context"):
         validate_deepening_write_pairs(

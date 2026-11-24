@@ -67,7 +67,7 @@ def test_final_v4_22_pins() -> None:
     assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not list((ROOT / "alembic" / "versions").glob("0018*"))
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"

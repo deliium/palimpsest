@@ -62,6 +62,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V25,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
+    EVENT_SCHEMA_REPLAY_V29,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -130,6 +131,7 @@ from world.events import (
     ResourceHarvested,
     ResourceNodeDepleted,
     ResourceNodeRecovered,
+    ResourcePressureRecorded,
     ResourceRegenerated,
     RouteConditionChanged,
     Searched,
@@ -434,6 +436,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V25,
             EVENT_SCHEMA_REPLAY_V27,
             EVENT_SCHEMA_REPLAY_V28,
+            EVENT_SCHEMA_REPLAY_V29,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -453,6 +456,41 @@ def _group_by_tick(events: tuple[WorldEvent, ...]) -> tuple[_TickGroup, ...]:
                 raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
         groups.append(_TickGroup(tick=tick, events=batch))
     return tuple(groups)
+
+
+_STRUCTURAL_LIFECYCLE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        AgentCreated,
+        AgentEnteredWorld,
+        AgentInitializationRecorded,
+        LifecycleStageChanged,
+        KinshipEdgeRecorded,
+    }
+)
+
+
+def _exact_quantity_tenths(quantity: float) -> int:
+    rounded = round_physical(quantity)
+    if rounded != float(quantity):
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+    return round(rounded * 10.0)
+
+
+def _is_structural_lifecycle_only(events: Sequence[WorldEvent]) -> bool:
+    from world.effects import SystemCause, SystemEffectFamily
+
+    if not events:
+        return False
+    for event in events:
+        if type(event.details) not in _STRUCTURAL_LIFECYCLE_DETAIL_TYPES:
+            return False
+        cause = event.cause
+        if (
+            type(cause) is not SystemCause
+            or cause.effect_family is not SystemEffectFamily.LIFECYCLE
+        ):
+            return False
+    return True
 
 
 def _project_tick_group(
@@ -482,9 +520,131 @@ def _project_tick_group(
         if event.tick != group.tick:
             raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
 
+    pressure_active = (
+        schema_version == EVENT_SCHEMA_REPLAY_V29
+        and state.ecological_resources is not None
+    )
+    tick_start_tenths: dict[EntityId, int] = {}
+    managed_order: tuple[EntityId, ...] = ()
+    if pressure_active:
+        assert state.ecological_resources is not None
+        managed_order = tuple(
+            sorted(state.ecological_resources, key=lambda item: item.value)
+        )
+        for resource_id in managed_order:
+            resource = state.resources.get(resource_id)
+            if resource is None:
+                raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+            tick_start_tenths[resource_id] = _exact_quantity_tenths(resource.quantity)
+
     working = state
     mutated = False
+    seen_pressure: list[EntityId] = []
+    pending_renewal_id: EntityId | None = None
+    pending_regen_delta: float | None = None
+    pending_regen_end: float | None = None
+    pressure_index = 0
+
     for event in group.events:
+        details = event.details
+        if pending_renewal_id is not None:
+            if type(details) is not ResourceRegenerated:
+                raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
+            if (
+                details.resource_id != pending_renewal_id
+                or pending_regen_delta is None
+                or pending_regen_end is None
+                or round_physical(details.quantity_delta) != pending_regen_delta
+                or round_physical(details.resulting_quantity) != pending_regen_end
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            next_state, changed = _apply_event_effect(
+                working,
+                event,
+                schema_version=schema_version,
+                production_catalog=production_catalog,
+                environmental_dynamics=environmental_dynamics,
+            )
+            working = next_state
+            mutated = mutated or changed
+            pending_renewal_id = None
+            pending_regen_delta = None
+            pending_regen_end = None
+            continue
+
+        if pressure_active and type(details) is ResourcePressureRecorded:
+            if pressure_index >= len(managed_order):
+                raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
+            expected_id = managed_order[pressure_index]
+            if details.resource_id != expected_id:
+                raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
+            if details.resource_id in seen_pressure:
+                raise ProjectionError(ProjectionErrorCode.DUPLICATE_EVENT)
+            if details.start_tenths != tick_start_tenths[details.resource_id]:
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            resource = working.resources.get(details.resource_id)
+            if resource is None:
+                raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+            post_tenths = _exact_quantity_tenths(resource.quantity)
+            if details.post_action_tenths != post_tenths:
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            withdrawn = details.start_tenths - details.post_action_tenths
+            if (
+                withdrawn == 0
+                and details.after_damage_tenths > details.before_damage_tenths
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            if (
+                withdrawn > 0
+                and details.after_damage_tenths < details.before_damage_tenths
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            baseline_tenths = _exact_quantity_tenths(resource.maximum_quantity)
+            next_capacity = baseline_tenths - details.after_damage_tenths
+            if next_capacity < 0:
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            headroom = next_capacity - details.post_action_tenths
+            if details.regenerated_tenths > headroom:
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            if (
+                details.effective_potential_tenths
+                > details.healthy_potential_tenths
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            if (
+                details.damage_threshold_tenths
+                < details.effective_potential_tenths
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            next_state, changed = _apply_event_effect(
+                working,
+                event,
+                schema_version=schema_version,
+                production_catalog=production_catalog,
+                environmental_dynamics=environmental_dynamics,
+            )
+            working = next_state
+            mutated = mutated or changed
+            seen_pressure.append(details.resource_id)
+            pressure_index += 1
+            if details.regenerated_tenths > 0:
+                pending_renewal_id = details.resource_id
+                pending_regen_delta = round_physical(
+                    details.regenerated_tenths / 10.0
+                )
+                pending_regen_end = round_physical(
+                    details.post_action_tenths / 10.0 + pending_regen_delta
+                )
+            continue
+
+        if (
+            pressure_active
+            and type(details) is ResourceRegenerated
+            and working.ecological_resources is not None
+            and details.resource_id in working.ecological_resources
+        ):
+            raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
+
         next_state, changed = _apply_event_effect(
             working,
             event,
@@ -510,6 +670,28 @@ def _project_tick_group(
         )
         mutated = mutated or decayed is not working
         working = decayed
+
+    if pressure_active:
+        structural_only = _is_structural_lifecycle_only(group.events)
+        if assign_revision:
+            if pending_renewal_id is not None:
+                raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
+            if not structural_only and tuple(seen_pressure) != managed_order:
+                raise ProjectionError(ProjectionErrorCode.INVALID_SEQUENCE)
+            if structural_only and seen_pressure:
+                raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
+        elif pending_renewal_id is not None and any(
+            type(event.details) is ResourceRegenerated
+            and event.details.resource_id == pending_renewal_id
+            for event in group.events
+        ):
+            raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+        _LOG.debug(
+            "overexploitation_fold tick=%s receipt_count=%s complete=%s",
+            group.tick,
+            len(seen_pressure),
+            assign_revision,
+        )
 
     if not assign_revision:
         if working.revision != base_revision:
@@ -663,6 +845,48 @@ def _apply_event_effect(
             try:
                 next_state = project_ecological_resource_changed(
                     state, details=ecology_changed
+                )
+            except EcologicalInvariantError as exc:
+                raise ProjectionError(
+                    ProjectionErrorCode.INVARIANT_FAILED
+                ) from exc
+            return next_state, next_state is not state
+        case ResourcePressureRecorded() as pressure:
+            from world._ecological_resources import (
+                EcologicalInvariantError,
+                project_ecological_resource_changed,
+            )
+            from world.effects import SystemCause, SystemEffectFamily
+
+            cause = event.cause
+            if (
+                type(cause) is not SystemCause
+                or cause.effect_family is not SystemEffectFamily.REGENERATION
+                or cause.entity_id != pressure.resource_id
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            resource = state.resources.get(pressure.resource_id)
+            if resource is None:
+                raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+            if (
+                event.occurrence is None
+                or event.occurrence.origin_location_id != resource.location_id
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            if pressure.effective_potential_tenths > pressure.healthy_potential_tenths:
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            if pressure.damage_threshold_tenths < pressure.effective_potential_tenths:
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            if pressure.before_damage_tenths == pressure.after_damage_tenths:
+                return state, False
+            try:
+                next_state = project_ecological_resource_changed(
+                    state,
+                    details=EcologicalResourceChanged(
+                        resource_id=pressure.resource_id,
+                        before_damage_tenths=pressure.before_damage_tenths,
+                        after_damage_tenths=pressure.after_damage_tenths,
+                    ),
                 )
             except EcologicalInvariantError as exc:
                 raise ProjectionError(
@@ -1498,6 +1722,21 @@ def _project_kinship_edge_recorded(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     return state, False

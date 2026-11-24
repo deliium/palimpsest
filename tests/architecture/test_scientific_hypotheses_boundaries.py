@@ -61,6 +61,6 @@ def test_no_v57_no_0018_no_v2_and_no_godot_change() -> None:
     assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in SRC.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        assert "runner-config-v61" not in text, path
+        assert "runner-config-v62" not in text, path
         assert '"/v2' not in text, path
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []

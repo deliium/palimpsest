@@ -68,6 +68,7 @@ from world.events import (
     PublicGoodMaintained,
     PublicGoodOpposed,
     ResourceHarvested,
+    ResourcePressureRecorded,
     StructureBuilt,
     StructureRepaired,
     TakenFromCorpse,
@@ -1086,6 +1087,11 @@ def _project_event_window(
         if type(event.details) is EcologicalResourceChanged:
             _LOG.debug(
                 "ecological_occurrence_suppressed reason_code=private_transition"
+            )
+            continue
+        if type(event.details) is ResourcePressureRecorded:
+            _LOG.debug(
+                "overexploitation_occurrence_suppressed reason_code=private_transition"
             )
             continue
         if not subjective_valuation_active and type(event.details) in {

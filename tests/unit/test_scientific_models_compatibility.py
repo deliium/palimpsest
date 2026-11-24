@@ -157,9 +157,13 @@ def test_predictive_versions_are_independent_of_runner_and_replay() -> None:
         __import__("simulation.runner_models", fromlist=["x"]),
         "RUNNER_SCHEMA_VERSION_V60",
     )
-    assert not hasattr(
+    assert hasattr(
         __import__("simulation.runner_models", fromlist=["x"]),
         "RUNNER_SCHEMA_VERSION_V61",
+    )
+    assert not hasattr(
+        __import__("simulation.runner_models", fromlist=["x"]),
+        "RUNNER_SCHEMA_VERSION_V62",
     )
     assert FINALIZATION_COMMAND_ACCEPTED_VERSIONS == frozenset(
         {

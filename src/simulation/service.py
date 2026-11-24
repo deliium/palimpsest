@@ -59,27 +59,14 @@ class DurableCommitAmbiguity(RuntimeError):
 
 def _snapshot_content_equal(left: WorldSnapshot, right: WorldSnapshot) -> bool:
     """Compare objective checkpoint content ignoring integrity/predecessor."""
-    return (
-        left.snapshot_id == right.snapshot_id
-        and left.run_id == right.run_id
-        and left.world_id == right.world_id
-        and left.seed == right.seed
-        and left.config == right.config
-        and left.registrations == right.registrations
-        and left.locations == right.locations
-        and left.bodies == right.bodies
-        and left.items == right.items
-        and left.resources == right.resources
-        and left.weather == right.weather
-        and left.next_tick == right.next_tick
-        and left.revision == right.revision
-        and left.event_schema_version == right.event_schema_version
-        and left.projector_version == right.projector_version
-        and left.persistence_codec_version == right.persistence_codec_version
-        and left.derivation_version == right.derivation_version
-        and left.regions_migration == right.regions_migration
-        and left.journeys == right.journeys
-    )
+    from dataclasses import fields
+
+    for field in fields(WorldSnapshot):
+        if field.name in {"integrity_hash", "predecessor_commit_hash"}:
+            continue
+        if getattr(left, field.name) != getattr(right, field.name):
+            return False
+    return True
 
 
 class PersistentSimulationService:
@@ -143,6 +130,12 @@ class PersistentSimulationService:
             artifacts_active=self._engine._artifacts_enabled,
             lifecycle_active=self._engine.lifecycle_channel_active,
             new_agent_provenance_active=self._engine.new_agent_provenance_active,
+            kinship_active=self._engine.kinship_channel_active,
+            dependency_care_active=self._engine.dependency_care_channel_active,
+            durable_records_active=self._engine.durable_records_channel_active,
+            knowledge_repositories_active=(
+                self._engine.knowledge_repositories_channel_active
+            ),
             bounded_experimentation_active=self._engine.bounded_experimentation_active,
             possession_succession_active=self._engine.possession_succession_active,
             structured_commitments_active=self._engine.structured_commitments_active,
@@ -161,7 +154,53 @@ class PersistentSimulationService:
             ecological_feedback_active=(
                 self._engine._ecological_resources is not None
             ),
+            overexploitation_active=self._engine._overexploitation_active,
         )
+        if codec_version == "v27":
+            from dataclasses import replace as _dc_replace
+
+            from simulation.overexploitation_checkpoint import (
+                build_v27_checkpoint_extensions,
+            )
+            from world.kinship import KinshipGraph
+
+            graph = self._engine.kinship_graph
+            kinship_edges = graph.edges if type(graph) is KinshipGraph else ()
+            assert self._engine._environmental_dynamics is not None
+            v27_rows = build_v27_checkpoint_extensions(
+                state=state,
+                lifecycle_records=tuple(self._engine.lifecycle_records),
+                kinship_edges=kinship_edges,
+                dependency_need_registers=tuple(
+                    self._engine._dependency_need_registers.values()
+                ),
+                environmental_dynamics=self._engine._environmental_dynamics,
+                disease_spec=self._engine._disease_mechanics,
+                travel_network_active=self._engine.travel_network_active,
+            )
+            draft = WorldSnapshot(
+                snapshot_id=snapshot_id,
+                run_id=self._engine.run_id,
+                world_id=self._engine.world_id,
+                seed=self._engine._config.seed,
+                config=self._engine._config,
+                registrations=self._engine._registrations,
+                locations=tuple(state.locations.values()),
+                bodies=tuple(state.bodies.values()),
+                items=tuple(state.items.values()),
+                resources=tuple(state.resources.values()),
+                weather=tuple(state.weather.values()),
+                next_tick=next_snap.tick,
+                revision=candidate.resulting_revision,
+                event_schema_version=schema_version,
+                projector_version=PROJECTOR_VERSION,
+                persistence_codec_version=codec_version,
+                derivation_version=derivation,
+                integrity_hash=PayloadHash("a" * 64),
+                predecessor_commit_hash=None,
+                **v27_rows,
+            )
+            return _dc_replace(draft, integrity_hash=hash_snapshot(draft))
         production_rows: SnapshotExtensions = {}
         if codec_version in {
             "v3",
@@ -458,45 +497,9 @@ class PersistentSimulationService:
             predecessor_commit_hash=None,
             **production_rows,
         )
-        return WorldSnapshot(
-            snapshot_id=draft.snapshot_id,
-            run_id=draft.run_id,
-            world_id=draft.world_id,
-            seed=draft.seed,
-            config=draft.config,
-            registrations=draft.registrations,
-            locations=draft.locations,
-            bodies=draft.bodies,
-            items=draft.items,
-            resources=draft.resources,
-            weather=draft.weather,
-            next_tick=draft.next_tick,
-            revision=draft.revision,
-            event_schema_version=draft.event_schema_version,
-            projector_version=draft.projector_version,
-            persistence_codec_version=draft.persistence_codec_version,
-            derivation_version=draft.derivation_version,
-            integrity_hash=hash_snapshot(draft),
-            predecessor_commit_hash=None,
-            structures=draft.structures,
-            production_jobs=draft.production_jobs,
-            tool_marks=draft.tool_marks,
-            active_hazards=draft.active_hazards,
-            artifacts=draft.artifacts,
-            lifecycle_records=draft.lifecycle_records,
-            corpse_custody_item_ids=draft.corpse_custody_item_ids,
-            exchange_offers=draft.exchange_offers,
-            collective_projects=draft.collective_projects,
-            regions_migration=draft.regions_migration,
-            journeys=draft.journeys,
-            infrastructure=draft.infrastructure,
-            travel_network=draft.travel_network,
-            instrument_states=draft.instrument_states,
-            measurement_references=draft.measurement_references,
-            disease_mechanics=getattr(draft, "disease_mechanics", None),
-            ecological_resources=getattr(draft, "ecological_resources", None),
-            environmental_dynamics=getattr(draft, "environmental_dynamics", None),
-        )
+        from dataclasses import replace as _dc_replace_final
+
+        return _dc_replace_final(draft, integrity_hash=hash_snapshot(draft))
 
     async def resolve_tick(
         self,
@@ -587,30 +590,12 @@ class PersistentSimulationService:
             candidate_owned = self.draft_checkpoint_from_candidate(
                 candidate, snapshot_id=snapshot.snapshot_id
             )
-            caller_normalized = WorldSnapshot(
-                snapshot_id=snapshot.snapshot_id,
-                run_id=snapshot.run_id,
-                world_id=snapshot.world_id,
-                seed=snapshot.seed,
-                config=snapshot.config,
-                registrations=snapshot.registrations,
-                locations=snapshot.locations,
-                bodies=snapshot.bodies,
-                items=snapshot.items,
-                resources=snapshot.resources,
-                weather=snapshot.weather,
-                next_tick=snapshot.next_tick,
-                revision=snapshot.revision,
-                event_schema_version=snapshot.event_schema_version,
-                projector_version=snapshot.projector_version,
-                persistence_codec_version=snapshot.persistence_codec_version,
-                derivation_version=snapshot.derivation_version,
+            from dataclasses import replace as _dc_replace_caller
+
+            caller_normalized = _dc_replace_caller(
+                snapshot,
                 integrity_hash=candidate_owned.integrity_hash,
                 predecessor_commit_hash=None,
-                regions_migration=snapshot.regions_migration,
-                journeys=snapshot.journeys,
-                instrument_states=snapshot.instrument_states,
-                measurement_references=snapshot.measurement_references,
             )
             if not _snapshot_content_equal(caller_normalized, candidate_owned):
                 _LOGGER.error(

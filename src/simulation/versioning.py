@@ -95,6 +95,8 @@ TRAVEL_NETWORK_WRITE_PAIR_EVENT: Final[int] = 27
 TRAVEL_NETWORK_WRITE_PAIR_CODEC: Final[str] = "v25"
 MEASUREMENT_WRITE_PAIR_EVENT: Final[int] = 28
 MEASUREMENT_WRITE_PAIR_CODEC: Final[str] = "v26"
+OVEREXPLOITATION_WRITE_PAIR_EVENT: Final[int] = 29
+OVEREXPLOITATION_WRITE_PAIR_CODEC: Final[str] = "v27"
 
 V4_DEEPENING_WRITE_PAIRS: Final[tuple[DeepeningWritePair, ...]] = (
     DeepeningWritePair(
@@ -108,6 +110,12 @@ V4_DEEPENING_WRITE_PAIRS: Final[tuple[DeepeningWritePair, ...]] = (
         event_schema=MEASUREMENT_WRITE_PAIR_EVENT,
         codec_version=MEASUREMENT_WRITE_PAIR_CODEC,
         reason="physical instrument condition and displayed readings must replay",
+    ),
+    DeepeningWritePair(
+        context_id=V4ContextId.ECOLOGICAL_FEEDBACK,
+        event_schema=OVEREXPLOITATION_WRITE_PAIR_EVENT,
+        codec_version=OVEREXPLOITATION_WRITE_PAIR_CODEC,
+        reason="local overexploitation pressure and renewal receipts must replay",
     ),
 )
 
@@ -268,8 +276,12 @@ def reservation_for_context(context_id: V4ContextId) -> WritePairReservation:
 
 
 __all__ = [
+    "ECOLOGY_WRITE_PAIR_CODEC",
+    "ECOLOGY_WRITE_PAIR_EVENT",
     "MEASUREMENT_WRITE_PAIR_CODEC",
     "MEASUREMENT_WRITE_PAIR_EVENT",
+    "OVEREXPLOITATION_WRITE_PAIR_CODEC",
+    "OVEREXPLOITATION_WRITE_PAIR_EVENT",
     "TRAVEL_NETWORK_WRITE_PAIR_CODEC",
     "TRAVEL_NETWORK_WRITE_PAIR_EVENT",
     "V4_DEEPENING_WRITE_PAIRS",

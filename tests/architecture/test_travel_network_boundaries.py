@@ -32,10 +32,11 @@ def test_deepening_pair_is_separate_from_reservations() -> None:
     validate_deepening_write_pairs()
     assert TRAVEL_NETWORK_WRITE_PAIR_EVENT == 27
     assert TRAVEL_NETWORK_WRITE_PAIR_CODEC == "v25"
-    assert [pair.event_schema for pair in V4_DEEPENING_WRITE_PAIRS] == [27, 28]
+    assert [pair.event_schema for pair in V4_DEEPENING_WRITE_PAIRS] == [27, 28, 29]
     assert [pair.codec_version for pair in V4_DEEPENING_WRITE_PAIRS] == [
         "v25",
         "v26",
+        "v27",
     ]
 
 

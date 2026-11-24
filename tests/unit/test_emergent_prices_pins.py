@@ -74,7 +74,7 @@ def test_final_v4_21_pins() -> None:
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
     assert ALEMBIC_HEAD_REVISION == "0017"
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
     assert PRICE_BELIEF_PREFIX in "prcb-"

@@ -80,6 +80,7 @@ HIDDEN_OBSERVER_EVENT_TYPES: Final[frozenset[str]] = frozenset(
     {
         "disease_state_changed",
         "ecological_resource_changed",
+        "resource_pressure_recorded",
     }
 )
 _HIDDEN_OBSERVER_KINDS: Final[frozenset[str]] = HIDDEN_OBSERVER_EVENT_TYPES

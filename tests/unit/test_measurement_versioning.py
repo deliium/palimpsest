@@ -41,8 +41,12 @@ def test_measurement_pair_is_contiguous_after_travel() -> None:
         28,
         "v26",
     )
-    assert [pair.event_schema for pair in V4_DEEPENING_WRITE_PAIRS] == [27, 28]
-    assert [pair.codec_version for pair in V4_DEEPENING_WRITE_PAIRS] == ["v25", "v26"]
+    assert [pair.event_schema for pair in V4_DEEPENING_WRITE_PAIRS] == [27, 28, 29]
+    assert [pair.codec_version for pair in V4_DEEPENING_WRITE_PAIRS] == [
+        "v25",
+        "v26",
+        "v27",
+    ]
     validate_deepening_write_pairs()
 
 

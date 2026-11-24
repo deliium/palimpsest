@@ -316,7 +316,13 @@ async def test_hidden_only_batch_advances_cursor_then_budget() -> None:
 
     # Exclusive-scan budget is max(64, (limit+1)*16); 64 hidden-only rows exhaust it.
     hidden_only = tuple(
-        _ecology(f"evt-budget-{index}", tick=0, sequence=index, before=index, after=index + 1)
+        _ecology(
+            f"evt-budget-{index}",
+            tick=0,
+            sequence=index,
+            before=index,
+            after=index + 1,
+        )
         for index in range(64)
     )
     exhausted = _service(hidden_only)

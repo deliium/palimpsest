@@ -231,7 +231,7 @@ def test_v4_flag_literal_stays_inside_the_allowlist() -> None:
 
 def test_compatibility_pins_are_unchanged() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS

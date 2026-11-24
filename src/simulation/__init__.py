@@ -505,6 +505,7 @@ from simulation.dispute_ports import (
     dispute_query_fingerprint,
     require_known_dispute_candidate,
 )
+from simulation.ecological_resources_config import EcologicalResourcesSpec
 from simulation.economic_cascades_codec import (
     canonical_economic_cascades_json,
     decode_economic_cascades_snapshot,
@@ -1048,7 +1049,6 @@ from simulation.market_institutions_ports import (
     market_institutions_query_fingerprint,
 )
 from simulation.measurement_config import MeasurementInstrumentsSpec
-from simulation.ecological_resources_config import EcologicalResourcesSpec
 from simulation.medical_beliefs_config import MedicalBeliefsSpec
 from simulation.migration_plan import (
     V4_MIGRATION_PLAN_SCHEMA,
@@ -1184,6 +1184,7 @@ from simulation.organization_ports import (
     organization_query_fingerprint,
     require_known_organization,
 )
+from simulation.overexploitation_config import OverexploitationSpec
 from simulation.perception import (
     PerspectiveOwnershipCode,
     PerspectiveOwnershipError,
@@ -1315,6 +1316,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V58,
     RUNNER_SCHEMA_VERSION_V59,
     RUNNER_SCHEMA_VERSION_V60,
+    RUNNER_SCHEMA_VERSION_V61,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ArtifactInterpretationMode,
@@ -1893,6 +1895,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V58",
     "RUNNER_SCHEMA_VERSION_V59",
     "RUNNER_SCHEMA_VERSION_V60",
+    "RUNNER_SCHEMA_VERSION_V61",
     "SCALE_CONTRACT_VERSION",
     "SCALE_MAX_PARTITIONS",
     "SCALE_MAX_POPULATION",
@@ -2157,6 +2160,7 @@ __all__ = [
     "DomainSerializationError",
     "DriveOverrideSpec",
     "DurableCommitAmbiguity",
+    "EcologicalResourcesSpec",
     "EconomicCascadeChainRecord",
     "EconomicCascadeCoverageRecord",
     "EconomicCascadeDependencyRecord",
@@ -2355,7 +2359,6 @@ __all__ = [
     "MarketRoleRecord",
     "MarketVenueRecord",
     "MeasurementInstrumentsSpec",
-    "EcologicalResourcesSpec",
     "MedicalBeliefsSpec",
     "MemoryDerivationLineage",
     "MemoryDerivationLineagePort",
@@ -2402,6 +2405,7 @@ __all__ = [
     "OrganizationSummary",
     "OrganizationWindowRecord",
     "OriginRef",
+    "OverexploitationSpec",
     "OwnerLineageSource",
     "ParameterDistributionSpec",
     "ParameterDrawResult",

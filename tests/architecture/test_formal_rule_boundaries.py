@@ -349,7 +349,7 @@ def test_app_wiring_imports_only_api_and_persistence() -> None:
 
 def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(COMMAND_RULE_MATRIX) == 45
     assert ALEMBIC_HEAD_REVISION == "0017"

@@ -72,10 +72,11 @@ def test_pins_are_unchanged() -> None:
     assert RUNNER_SCHEMA_VERSION == "runner-config-v4"
     assert RUNNER_SCHEMA_VERSION_V55 == "runner-config-v55"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v27" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"
@@ -104,20 +105,21 @@ def test_v4_contexts_and_flags_are_unchanged() -> None:
 
 
 def test_deepening_pairs_are_unchanged() -> None:
-    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28]
+    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28, 29]
     assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == [
         "v25",
         "v26",
+        "v27",
     ]
-    assert 29 not in ACCEPTED_EVENT_SCHEMA_VERSIONS
-    assert "v27" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert 30 not in ACCEPTED_EVENT_SCHEMA_VERSIONS
+    assert "v28" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
 
 def test_no_v57_or_new_flag_reference() -> None:
     offenders = [
         path
         for path in SRC.rglob("*.py")
-        if "runner-config-v61" in path.read_text(encoding="utf-8")
+        if "runner-config-v62" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
     assert len(V4_CAPABILITY_FLAGS) == 12

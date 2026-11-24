@@ -399,7 +399,10 @@ def _bind_infrastructure_networks_channel(
     infrastructure: object | None,
 ) -> None:
     """Restore infrastructure_networks from codec v21 or projected asset map."""
-    active = codec_version in {"v21", "v25"} or infrastructure is not None
+    active = (
+        codec_version in {"v21", "v22", "v23", "v25", "v26", "v27"}
+        or infrastructure is not None
+    )
     engine._infrastructure_networks_active = active
     if active:
         _LOGGER.info(
@@ -529,6 +532,15 @@ class _BatchRestoreBuilder:
                 "ObjectiveSkillLedger",
                 self._fold_skill_tick(start_state, tick, ordered),
             )
+        if (
+            engine._overexploitation_active
+            and start_state.ecological_resources is not None
+            and not ordered
+        ):
+            # V29 physical ticks always emit one receipt per managed node.
+            # Empty authenticated batches are illegal once overexploitation is
+            # bound; Task 5 switches the live writer onto this pair.
+            raise ValueError("overexploitation_receipts_missing")
         projected = project_events(
             start_state,
             ordered,
@@ -786,6 +798,7 @@ class WorldEngine:
         "_lifecycle_records",
         "_measurement_active",
         "_new_agent_initialization",
+        "_overexploitation_active",
         "_perception",
         "_population_lifecycle",
         "_possession_succession_active",
@@ -854,6 +867,7 @@ class WorldEngine:
         supply_chains_active: bool = False,
         disease_mechanics: object | None = None,
         ecological_resources: object | None = None,
+        overexploitation_active: bool = False,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -862,6 +876,8 @@ class WorldEngine:
         self._config = config
         self._bootstrap = bootstrap
         self._measurement_active = bool(bootstrap.instrument_states)
+        if type(overexploitation_active) is not bool:
+            raise TypeError("overexploitation_active must be bool")
         from simulation.disease_config import DiseaseMechanicsSpec
         from simulation.ecological_resources_config import EcologicalResourcesSpec
         from world._ecological_resources import validate_ecological_resources_state
@@ -933,6 +949,16 @@ class WorldEngine:
             _LOGGER.debug(
                 "ecological_resources_bound managed_count=%s schema=v60",
                 len(self._ecological_resources.nodes),
+            )
+        if overexploitation_active and self._ecological_resources is None:
+            raise ValueError("overexploitation_requires_ecological_channel")
+        self._overexploitation_active = overexploitation_active
+        if self._overexploitation_active:
+            _LOGGER.debug(
+                "overexploitation_bound managed_count=%s schema=v61",
+                len(self._ecological_resources.nodes)
+                if self._ecological_resources is not None
+                else 0,
             )
         self._run_id = run_id if run_id is not None else derive_run_id(config)
         if type(self._run_id) is not RunId:
@@ -1492,6 +1518,21 @@ class WorldEngine:
                     "ecology_policy_mismatch reason_code=ecology_policy_mismatch"
                 )
                 raise ValueError("ecology_policy_mismatch")
+            from simulation.bootstrap import _ecological_resources_from_snapshot
+            from world._ecological_resources import validate_ecological_resources_state
+
+            validate_ecological_resources_state(
+                _ecological_resources_from_snapshot(snapshot),
+                resources={
+                    resource.entity_id: resource for resource in snapshot.resources
+                },
+                policy_digest=ecology_section.policy_sha256,
+                expected_digest=digest,
+                expected_floors={
+                    node.resource_id: node.minimum_capacity_tenths
+                    for node in ecological_resources.nodes
+                },
+            )
         from world.environment import EnvironmentalDynamicsSpec as _EnvSpec
 
         snapshot_dynamics = getattr(snapshot, "environmental_dynamics", None)
@@ -1615,6 +1656,19 @@ class WorldEngine:
                     for node in ecological_resources.nodes
                 }
             )
+        from simulation.versioning import (
+            OVEREXPLOITATION_WRITE_PAIR_CODEC,
+            OVEREXPLOITATION_WRITE_PAIR_EVENT,
+        )
+
+        # Infer overexploitation mode from the verified checkpoint pair only.
+        engine._overexploitation_active = (
+            snapshot.event_schema_version == OVEREXPLOITATION_WRITE_PAIR_EVENT
+            and snapshot.persistence_codec_version
+            == OVEREXPLOITATION_WRITE_PAIR_CODEC
+        )
+        if engine._overexploitation_active and ecology_section is None:
+            raise ValueError("overexploitation_requires_ecological_channel")
         if ecology_section is not None:
             _LOGGER.debug(
                 "ecological_channel_restored managed_count=%s policy_bound=%s",
@@ -1797,7 +1851,11 @@ class WorldEngine:
                 "v19",
                 "v20",
             "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
+            "v27",
             }
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
@@ -1818,7 +1876,11 @@ class WorldEngine:
             "v19",
             "v20",
         "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
+            "v27",
         }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
@@ -1864,7 +1926,11 @@ class WorldEngine:
                 "v19",
                 "v20",
             "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
+            "v27",
             } and snapshot.event_schema_version in {
                 10,
                 11,
@@ -1931,7 +1997,11 @@ class WorldEngine:
             "v19",
             "v20",
         "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
+            "v27",
         }:
             from simulation.runner_models import DurableRecordsSpec
 
@@ -1964,7 +2034,11 @@ class WorldEngine:
             "v19",
             "v20",
         "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
+            "v27",
         }:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
@@ -2002,7 +2076,11 @@ class WorldEngine:
             "v19",
             "v20",
             "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
+            "v27",
         }:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
@@ -2041,7 +2119,11 @@ class WorldEngine:
             "v19",
             "v20",
             "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
+            "v27",
         }:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
@@ -2117,7 +2199,11 @@ class WorldEngine:
             "v19",
             "v20",
         "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
+            "v27",
         }:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
@@ -2464,6 +2550,7 @@ class WorldEngine:
                 measurement_active=self._measurement_active,
                 disease_active=self._disease_mechanics is not None,
                 ecological_feedback_active=self._ecological_resources is not None,
+                overexploitation_active=self._overexploitation_active,
             )
             snap = self._snapshot
             sequence = snap.event_history.count_with_tick(tick)
@@ -2713,6 +2800,7 @@ class WorldEngine:
         measurement_active=self._measurement_active,
         disease_active=self._disease_mechanics is not None,
         ecological_feedback_active=self._ecological_resources is not None,
+        overexploitation_active=self._overexploitation_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -4692,6 +4780,7 @@ class WorldEngine:
                 public_goods_active=self._public_goods_active,
                 ecological_parameters=self._ecological_parameters,
                 ecological_tick_start_quantities=ecology_tick_starts,
+                overexploitation_active=self._overexploitation_active,
             )
         except ValueError as exc:
             message = str(exc)
@@ -5116,6 +5205,7 @@ class WorldEngine:
         measurement_active=self._measurement_active,
         disease_active=self._disease_mechanics is not None,
         ecological_feedback_active=self._ecological_resources is not None,
+        overexploitation_active=self._overexploitation_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -7385,6 +7475,7 @@ def select_checkpoint_schema(
     measurement_active: bool = False,
     disease_active: bool = False,
     ecological_feedback_active: bool = False,
+    overexploitation_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -7437,8 +7528,29 @@ def select_checkpoint_schema(
         measurement_active=measurement_active,
         disease_active=disease_active,
         ecological_feedback_active=ecological_feedback_active,
+        overexploitation_active=overexploitation_active,
     )
 
+    if overexploitation_active:
+        from simulation.versioning import (
+            OVEREXPLOITATION_WRITE_PAIR_CODEC,
+            OVEREXPLOITATION_WRITE_PAIR_EVENT,
+        )
+
+        if (
+            schema_version != OVEREXPLOITATION_WRITE_PAIR_EVENT
+            or codec != OVEREXPLOITATION_WRITE_PAIR_CODEC
+        ):
+            _LOGGER.warning(
+                "checkpoint_schema_disagrees schema_version=%s codec=%s "
+                "expected_schema=%s expected_codec=%s "
+                "reason=overexploitation_active",
+                schema_version,
+                codec,
+                OVEREXPLOITATION_WRITE_PAIR_EVENT,
+                OVEREXPLOITATION_WRITE_PAIR_CODEC,
+            )
+        return schema_version, codec
     if ecological_feedback_active:
         from simulation.versioning import (
             ECOLOGY_WRITE_PAIR_CODEC,

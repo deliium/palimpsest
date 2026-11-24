@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 __all__ = [
     "EcologicalInvariantError",
     "EcologicalStockRow",
+    "OverexploitationAdvance",
+    "advance_overexploitation",
     "advance_stock_damage",
     "bootstrap_ecological_rows",
     "effective_capacity_tenths",
@@ -195,6 +197,113 @@ def advance_stock_damage(
         resource_id=row.resource_id,
         minimum_capacity_tenths=row.minimum_capacity_tenths,
         damage_tenths=next_damage,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class OverexploitationAdvance:
+    """One managed-node overexploitation transition in integer tenths."""
+
+    row: EcologicalStockRow
+    healthy_potential_tenths: int
+    effective_potential_tenths: int
+    pressure_tolerance_tenths: int
+    withdrawn_tenths: int
+    renewal_tenths: int
+    end_quantity_tenths: int
+
+
+def advance_overexploitation(
+    row: EcologicalStockRow,
+    *,
+    baseline_tenths: int,
+    start_quantity_tenths: int,
+    post_command_quantity_tenths: int,
+    allowance_tenths: int,
+    recovery_tenths: int,
+    healthy_potential_tenths: int,
+) -> OverexploitationAdvance:
+    """Pure v61 stock response: pressure, capacity, and capped renewal.
+
+    ``H`` is the healthy seasonal/infrastructure potential in tenths, already
+    shortage-zeroed and capped at the baseline. Actual renewal uses next
+    capacity headroom; withdrawal at or below tolerance does not heal.
+    """
+    if type(row) is not EcologicalStockRow:
+        raise TypeError("advance_overexploitation requires EcologicalStockRow")
+    base = _require_tenths_int("baseline", baseline_tenths)
+    start = _require_tenths_int("start_quantity", start_quantity_tenths)
+    post = _require_tenths_int("post_quantity", post_command_quantity_tenths)
+    allowance = _require_tenths_int("allowance", allowance_tenths)
+    recovery = _require_tenths_int("recovery", recovery_tenths)
+    healthy = _require_tenths_int("healthy_potential", healthy_potential_tenths)
+    if allowance > 10000:
+        raise _fail("ecological_allowance_invalid")
+    if recovery < 1 or recovery > 10000:
+        raise _fail("ecological_recovery_invalid")
+    if healthy > 10000:
+        raise _fail("ecological_healthy_potential_invalid")
+    if not (1 <= row.minimum_capacity_tenths < base <= 10000):
+        raise _fail("ecological_capacity_bounds")
+    span = base - row.minimum_capacity_tenths
+    if row.damage_tenths > span:
+        raise _fail("ecological_damage_above_span")
+    capacity = base - row.damage_tenths
+    if not (0 <= post <= start <= capacity):
+        raise _fail("ecological_quantity_bounds")
+    if start > capacity or post > capacity:
+        raise _fail("ecological_quantity_above_capacity")
+    if post > start:
+        raise _fail("ecological_post_above_start")
+    if healthy > base:
+        raise _fail("ecological_healthy_potential_invalid")
+    withdrawn = start - post
+    # P = H * (B - D) // B; T = max(P, allowance)
+    pressure_cap = (healthy * capacity) // base if base > 0 else 0
+    tolerance = max(pressure_cap, allowance)
+    if withdrawn == 0:
+        next_damage = max(0, row.damage_tenths - recovery)
+    else:
+        next_damage = min(span, row.damage_tenths + max(0, withdrawn - tolerance))
+        if next_damage - row.damage_tenths > withdrawn:
+            raise _fail("ecological_damage_exceeds_withdrawal")
+    next_capacity = base - next_damage
+    if not (row.minimum_capacity_tenths <= next_capacity <= base):
+        raise _fail("ecological_capacity_bounds")
+    if post > next_capacity:
+        raise _fail("ecological_quantity_above_capacity")
+    # R = min(H * Cnext // B, Cnext - post)
+    potential_renewal = (healthy * next_capacity) // base if base > 0 else 0
+    headroom = next_capacity - post
+    renewal = min(potential_renewal, headroom)
+    if renewal < 0:
+        raise _fail("ecological_renewal_negative")
+    end_quantity = post + renewal
+    if end_quantity > next_capacity:
+        raise _fail("ecological_quantity_above_capacity")
+    next_row = EcologicalStockRow(
+        resource_id=row.resource_id,
+        minimum_capacity_tenths=row.minimum_capacity_tenths,
+        damage_tenths=next_damage,
+    )
+    _LOG.debug(
+        "overexploitation_advanced withdrawn=%s renewal=%s damage_before=%s "
+        "damage_after=%s tolerance=%s healthy=%s",
+        withdrawn,
+        renewal,
+        row.damage_tenths,
+        next_damage,
+        tolerance,
+        healthy,
+    )
+    return OverexploitationAdvance(
+        row=next_row,
+        healthy_potential_tenths=healthy,
+        effective_potential_tenths=pressure_cap,
+        pressure_tolerance_tenths=tolerance,
+        withdrawn_tenths=withdrawn,
+        renewal_tenths=renewal,
+        end_quantity_tenths=end_quantity,
     )
 
 

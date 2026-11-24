@@ -454,7 +454,7 @@ def test_exact_context_flag_reservation_and_wire_pins() -> None:
 
 def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS

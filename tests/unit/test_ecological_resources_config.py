@@ -193,6 +193,14 @@ def _as_v60(
                 instrumented.measurement_instruments
             )
             replacements["scenario"] = instrumented.scenario
+            replacements["bounded_experimentation"] = (
+                instrumented.bounded_experimentation
+            )
+            replacements["capability_flags"] = instrumented.capability_flags
+            replacements["cultural_feature_provenance"] = (
+                instrumented.cultural_feature_provenance
+            )
+            replacements["v3_capability_flags"] = instrumented.v3_capability_flags
             replacements["v4_capability_flags"] = replace(
                 replacements["v4_capability_flags"],
                 science=True,

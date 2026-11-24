@@ -2095,6 +2095,7 @@ def build_cognitive_loop(
     bounded_experimentation_spec: object | None = None,
     measurement_enabled: bool = False,
     medical_beliefs_enabled: bool = False,
+    overexploitation_inference_enabled: bool = False,
     regional_migration_cognition_mode: str | None = None,
     regional_migration_hop_limit: int = 1,
 ) -> CognitiveLoop:
@@ -2289,6 +2290,7 @@ def build_cognitive_loop(
         bounded_experimentation_spec=bounded_experimentation_spec,
         measurement_enabled=measurement_enabled,
         medical_beliefs_enabled=medical_beliefs_enabled,
+        overexploitation_inference_enabled=overexploitation_inference_enabled,
         territorial_claim_mode=resolved.territorial_claim_mode,
         territorial_claim_policy=resolved.territorial_claim_policy,
         borders_mode=resolved.borders_mode,

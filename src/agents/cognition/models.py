@@ -4451,6 +4451,7 @@ class CognitiveLoopResult:
     scientific_model_ledger: object | None = None
     competing_theory_ledger: object | None = None
     organized_conflict_audits: tuple[object, ...] | None = None
+    local_pressure_hypotheses: tuple[object, ...] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4460,6 +4461,23 @@ class CognitiveLoopResult:
         )
         if type(self.agent_id) is not AgentId:
             raise TypeError("CognitiveLoopResult.agent_id must be AgentId")
+        if self.local_pressure_hypotheses is not None:
+            from agents.cognition.overexploitation_inference import (
+                LocalPressureHypothesis,
+            )
+
+            if not isinstance(self.local_pressure_hypotheses, tuple):
+                raise TypeError(
+                    "local_pressure_hypotheses must be a tuple or None"
+                )
+            for row in self.local_pressure_hypotheses:
+                if type(row) is not LocalPressureHypothesis:
+                    raise TypeError(
+                        "local_pressure_hypotheses entries must be "
+                        "LocalPressureHypothesis"
+                    )
+                if row.owner_id != self.agent_id:
+                    raise ValueError("local_pressure_hypotheses owner_id mismatch")
         if self.causal_world_model is not None:
             from agents.cognition.world_model import CausalWorldModel
 

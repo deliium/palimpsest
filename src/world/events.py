@@ -97,6 +97,7 @@ EVENT_SCHEMA_REPLAY_V24: Final[int] = 24
 EVENT_SCHEMA_REPLAY_V25: Final[int] = 25
 EVENT_SCHEMA_REPLAY_V27: Final[int] = 27
 EVENT_SCHEMA_REPLAY_V28: Final[int] = 28
+EVENT_SCHEMA_REPLAY_V29: Final[int] = 29
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -126,6 +127,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -156,6 +158,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -185,6 +188,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -211,6 +215,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -236,6 +241,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -260,6 +266,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -283,6 +290,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -305,6 +313,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -326,6 +335,7 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -346,6 +356,7 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
@@ -2442,6 +2453,70 @@ class EcologicalResourceChanged:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+def _require_pressure_tenths(name: str, value: object) -> int:
+    if type(value) is not int or isinstance(value, bool):
+        raise ValueError(f"resource_pressure_{name}_invalid")
+    if value < 0 or value > 10000:
+        raise ValueError(f"resource_pressure_{name}_invalid")
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class ResourcePressureRecorded:
+    """Bounded per-node overexploitation receipt for one resolved physical tick."""
+
+    resource_id: EntityId
+    start_tenths: int
+    post_action_tenths: int
+    healthy_potential_tenths: int
+    effective_potential_tenths: int
+    damage_threshold_tenths: int
+    before_damage_tenths: int
+    after_damage_tenths: int
+    regenerated_tenths: int
+    kind: Literal["resource_pressure_recorded"] = field(
+        default="resource_pressure_recorded", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.resource_id) is not EntityId:
+            raise TypeError("ResourcePressureRecorded.resource_id must be EntityId")
+        start = _require_pressure_tenths("start", self.start_tenths)
+        post = _require_pressure_tenths("post_action", self.post_action_tenths)
+        healthy = _require_pressure_tenths(
+            "healthy_potential", self.healthy_potential_tenths
+        )
+        effective = _require_pressure_tenths(
+            "effective_potential", self.effective_potential_tenths
+        )
+        threshold = _require_pressure_tenths(
+            "damage_threshold", self.damage_threshold_tenths
+        )
+        before = _require_pressure_tenths("before_damage", self.before_damage_tenths)
+        after = _require_pressure_tenths("after_damage", self.after_damage_tenths)
+        regenerated = _require_pressure_tenths(
+            "regenerated", self.regenerated_tenths
+        )
+        if post > start:
+            raise ValueError("resource_pressure_post_above_start")
+        if effective > healthy:
+            raise ValueError("resource_pressure_effective_above_healthy")
+        if threshold < effective:
+            raise ValueError("resource_pressure_threshold_below_effective")
+        if before == after and regenerated == 0 and start == post and healthy == 0:
+            # Zero-effect receipts remain legal; no further structural ban.
+            pass
+        object.__setattr__(self, "start_tenths", start)
+        object.__setattr__(self, "post_action_tenths", post)
+        object.__setattr__(self, "healthy_potential_tenths", healthy)
+        object.__setattr__(self, "effective_potential_tenths", effective)
+        object.__setattr__(self, "damage_threshold_tenths", threshold)
+        object.__setattr__(self, "before_damage_tenths", before)
+        object.__setattr__(self, "after_damage_tenths", after)
+        object.__setattr__(self, "regenerated_tenths", regenerated)
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 @dataclass(frozen=True, slots=True)
 class InstrumentCalibrated:
     """Effect-complete adjustment against a physical reference."""
@@ -3378,6 +3453,7 @@ EventDetails = (
     | InstrumentCalibrated
     | DiseaseStateChanged
     | EcologicalResourceChanged
+    | ResourcePressureRecorded
     | CorpseCustodyOpened
     | TakenFromCorpse
     | PossessionClaimAsserted
@@ -3460,6 +3536,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         InstrumentCalibrated,
         DiseaseStateChanged,
         EcologicalResourceChanged,
+        ResourcePressureRecorded,
         CorpseCustodyOpened,
         TakenFromCorpse,
         PossessionClaimAsserted,
@@ -3499,6 +3576,7 @@ _INFRASTRUCTURE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 
@@ -3511,6 +3589,7 @@ _TRAVEL_NETWORK_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 
@@ -3518,21 +3597,34 @@ _MEASUREMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {MeasurementTaken, InstrumentCalibrated}
 )
 _MEASUREMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V24,
+    {
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
-        EVENT_SCHEMA_REPLAY_V28}
+        EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
+    }
 )
 _DISEASE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {DiseaseStateChanged}
 )
 _DISEASE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V24, EVENT_SCHEMA_REPLAY_V25}
+    {
+        EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V29,
+    }
 )
 _ECOLOGY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {EcologicalResourceChanged}
 )
 _ECOLOGY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
     {EVENT_SCHEMA_REPLAY_V25}
+)
+_OVEREXPLOITATION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {ResourcePressureRecorded}
+)
+_OVEREXPLOITATION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V29}
 )
 
 
@@ -3564,6 +3656,7 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -3581,6 +3674,7 @@ _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -3597,6 +3691,7 @@ _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _POSSESSION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3615,6 +3710,7 @@ _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _COMMITMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({CommitmentDeclared})
@@ -3630,6 +3726,7 @@ _EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3652,6 +3749,7 @@ _PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _PUBLIC_GOOD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3667,6 +3765,7 @@ _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _JOURNEY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3681,6 +3780,7 @@ _JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 _CONTACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({ContactRecorded})
@@ -3752,6 +3852,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }
 )
 
@@ -3881,6 +3982,8 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
         return schema_version in _DISEASE_EVENT_SCHEMAS
     if type(details) in _ECOLOGY_DETAIL_TYPES:
         return schema_version in _ECOLOGY_EVENT_SCHEMAS
+    if type(details) in _OVEREXPLOITATION_DETAIL_TYPES:
+        return schema_version in _OVEREXPLOITATION_EVENT_SCHEMAS
     if type(details) in _INFRASTRUCTURE_DETAIL_TYPES:
         return schema_version in _INFRASTRUCTURE_EVENT_SCHEMAS
     if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
@@ -4180,6 +4283,8 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return body_id
         case EcologicalResourceChanged(resource_id=resource_id):
             return resource_id
+        case ResourcePressureRecorded(resource_id=resource_id):
+            return resource_id
         case (
             CorpseCustodyOpened(body_id=body_id)
             | PossessionClaimAsserted(decedent_id=body_id)
@@ -4405,6 +4510,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=ecological_resources_requires_v25",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _OVEREXPLOITATION_DETAIL_TYPES:
+            if self.schema_version not in _OVEREXPLOITATION_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=overexploitation_requires_v29",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -5039,6 +5153,13 @@ def build_occurrence_context(
                 private_recipient_ids=(),
             )
         case EcologicalResourceChanged(resource_id=resource_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(resource_id,),
+                private_recipient_ids=(),
+            )
+        case ResourcePressureRecorded(resource_id=resource_id):
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,

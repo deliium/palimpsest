@@ -89,7 +89,7 @@ def test_no_accounting_context_flag_or_schema_bump() -> None:
             "ecological_feedback",
         }
     )
-    token = "runner-config-" + "v61"
+    token = "runner-config-" + "v62"
     assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in SRC.rglob("*accounting_ledgers*.py"):
         assert token not in path.read_text(encoding="utf-8", errors="ignore")
@@ -111,7 +111,7 @@ def test_version_pins_are_unchanged() -> None:
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(get_args(AgentCommand)) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS

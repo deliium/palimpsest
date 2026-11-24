@@ -189,6 +189,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V25,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
+    EVENT_SCHEMA_REPLAY_V29,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -259,6 +260,7 @@ from world.events import (
     ResourceHarvested,
     ResourceNodeDepleted,
     ResourceNodeRecovered,
+    ResourcePressureRecorded,
     ResourceRegenerated,
     RouteConditionChanged,
     Searched,
@@ -406,6 +408,7 @@ def required_domain_schema(value: object) -> int:
                 InstrumentCalibrated,
                 DiseaseStateChanged,
                 EcologicalResourceChanged,
+                ResourcePressureRecorded,
             }
             else SCHEMA_VERSION
         )
@@ -5243,6 +5246,29 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "before_damage_tenths": before_damage_tenths,
                 "after_damage_tenths": after_damage_tenths,
             }
+        case ResourcePressureRecorded(
+            resource_id=resource_id,
+            start_tenths=start_tenths,
+            post_action_tenths=post_action_tenths,
+            healthy_potential_tenths=healthy_potential_tenths,
+            effective_potential_tenths=effective_potential_tenths,
+            damage_threshold_tenths=damage_threshold_tenths,
+            before_damage_tenths=before_damage_tenths,
+            after_damage_tenths=after_damage_tenths,
+            regenerated_tenths=regenerated_tenths,
+        ):
+            return {
+                "kind": "resource_pressure_recorded",
+                "resource_id": resource_id.value,
+                "start_tenths": start_tenths,
+                "post_action_tenths": post_action_tenths,
+                "healthy_potential_tenths": healthy_potential_tenths,
+                "effective_potential_tenths": effective_potential_tenths,
+                "damage_threshold_tenths": damage_threshold_tenths,
+                "before_damage_tenths": before_damage_tenths,
+                "after_damage_tenths": after_damage_tenths,
+                "regenerated_tenths": regenerated_tenths,
+            }
         case Searched(
             target_id=target_id,
             success=success,
@@ -6637,6 +6663,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V24,
                 EVENT_SCHEMA_REPLAY_V25,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if set(fields) != {
@@ -6666,6 +6693,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V24,
                 EVENT_SCHEMA_REPLAY_V25,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
@@ -6711,6 +6739,7 @@ def _decode_event_details(
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V24,
                 EVENT_SCHEMA_REPLAY_V25,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if set(fields) != {"body_id", "before", "after"}:
@@ -6760,12 +6789,50 @@ def _decode_event_details(
                 after_damage_tenths=after,
             )
 
+        if kind == "resource_pressure_recorded":
+            if schema_version != EVENT_SCHEMA_REPLAY_V29:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            expected = {
+                "resource_id",
+                "start_tenths",
+                "post_action_tenths",
+                "healthy_potential_tenths",
+                "effective_potential_tenths",
+                "damage_threshold_tenths",
+                "before_damage_tenths",
+                "after_damage_tenths",
+                "regenerated_tenths",
+            }
+            if set(fields) != expected:
+                raise DomainSerializationError("invalid_fields", path)
+
+            def _tenths(name: str) -> int:
+                value = fields[name]
+                if type(value) is not int or isinstance(value, bool):
+                    raise DomainSerializationError("invalid_int", path)
+                if value < 0 or value > 10000:
+                    raise DomainSerializationError("invalid_int", path)
+                return value
+
+            return ResourcePressureRecorded(
+                resource_id=EntityId(_str_field(fields, "resource_id", path=path)),
+                start_tenths=_tenths("start_tenths"),
+                post_action_tenths=_tenths("post_action_tenths"),
+                healthy_potential_tenths=_tenths("healthy_potential_tenths"),
+                effective_potential_tenths=_tenths("effective_potential_tenths"),
+                damage_threshold_tenths=_tenths("damage_threshold_tenths"),
+                before_damage_tenths=_tenths("before_damage_tenths"),
+                after_damage_tenths=_tenths("after_damage_tenths"),
+                regenerated_tenths=_tenths("regenerated_tenths"),
+            )
+
         if kind == "route_condition_changed":
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V24,
                 EVENT_SCHEMA_REPLAY_V25,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
@@ -6880,6 +6947,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
@@ -6930,6 +6998,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
@@ -7013,6 +7082,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             _require_keys(
@@ -7110,6 +7180,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
@@ -7603,6 +7674,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -7634,6 +7706,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
@@ -7666,6 +7739,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if kind in {
@@ -7687,6 +7761,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_artifact_details(kind, fields, path=path)
@@ -7713,6 +7788,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -7734,6 +7810,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -7754,6 +7831,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_possession_details(kind, fields, path=path)
@@ -7768,6 +7846,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 _LOG.error(
                     "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -7790,6 +7869,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 _LOG.error(
                     "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -7811,6 +7891,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_experiment_resolved(fields, path=path)
@@ -7835,6 +7916,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_repository_details(kind, fields, path=path)
@@ -7857,6 +7939,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_project_or_public_details(
@@ -7874,6 +7957,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
+                EVENT_SCHEMA_REPLAY_V29,
             }:
                 _LOG.warning(
                     "public_good event rejected on pre-v20 payload kind=%s",
@@ -8243,6 +8327,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         if value.schema_version not in {
             EVENT_SCHEMA_REPLAY_V24,
             EVENT_SCHEMA_REPLAY_V25,
+            EVENT_SCHEMA_REPLAY_V29,
         } or wire_schema != 2:
             raise DomainSerializationError(
                 "invalid_event_schema_version", "$.schema_version"
@@ -8252,11 +8337,17 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
             raise DomainSerializationError(
                 "invalid_event_schema_version", "$.schema_version"
             )
+    if details_kind == "resource_pressure_recorded":
+        if value.schema_version != EVENT_SCHEMA_REPLAY_V29 or wire_schema != 2:
+            raise DomainSerializationError(
+                "invalid_event_schema_version", "$.schema_version"
+            )
     if details_kind in {"measurement_taken", "instrument_calibrated"}:
         if value.schema_version not in {
             EVENT_SCHEMA_REPLAY_V24,
             EVENT_SCHEMA_REPLAY_V25,
             EVENT_SCHEMA_REPLAY_V28,
+            EVENT_SCHEMA_REPLAY_V29,
         } or wire_schema != 2:
             raise DomainSerializationError(
                 "invalid_event_schema_version", "$.schema_version"
@@ -8277,6 +8368,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8295,6 +8387,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8329,6 +8422,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8364,6 +8458,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8399,6 +8494,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8425,6 +8521,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8454,6 +8551,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8478,6 +8576,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8506,6 +8605,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8528,6 +8628,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8545,6 +8646,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         _LOG.error(
             "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -8570,6 +8672,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         _LOG.error(
             "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -8594,6 +8697,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8606,6 +8710,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8629,6 +8734,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
+        EVENT_SCHEMA_REPLAY_V29,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8815,6 +8921,7 @@ def _decode_world_event(
             EVENT_SCHEMA_REPLAY_V25,
             EVENT_SCHEMA_REPLAY_V27,
             EVENT_SCHEMA_REPLAY_V28,
+            EVENT_SCHEMA_REPLAY_V29,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]
