@@ -82,7 +82,7 @@ def test_api_configuration_and_ui_docs() -> None:
 
 def test_architecture_baseline_and_description() -> None:
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-34" in factory
+    assert "through V4-38" in factory
     assert "| Metric families | 275" in factory
     assert "V4-15 inter-society relations seam" in factory
     assert "inter-society-relations.md" in factory

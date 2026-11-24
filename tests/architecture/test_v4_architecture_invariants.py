@@ -117,6 +117,7 @@ ALLOWED_FLAG_REFERENCES = {
     "experiments/matrix_schema.py",
     "experiments/supply_chain_scenario.py",
     "experiments/disease_scenario.py",
+    "experiments/commons_governance_scenario.py",
     "research_runner/path_dependence_cli.py",
     "research_runner/path_dependence_composition.py",
     "simulation/replay.py",

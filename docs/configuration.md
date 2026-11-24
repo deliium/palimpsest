@@ -319,7 +319,8 @@ exact `runner-config-v58` `disease_mechanics` sibling), and
 `ecological_feedback` (V4-36, requiring `supply_chains`,
 `environmental_dynamics`, and the exact `runner-config-v60`
 `ecological_resources` sibling; deepened by V4-37 on `runner-config-v61`
-with the exact `overexploitation` sibling while keeping the same owned
+with the exact `overexploitation` sibling and by V4-38 on
+`runner-config-v62` with exact `commons_governance` while keeping the same owned
 flag). The remaining V4 flag — `disasters` — stays unowned and fails closed
 at `SimulationRunner.from_config`.
 
@@ -681,6 +682,14 @@ writes deepening replay event 29 / codec `v27`. Legacy v60 documents and the
 25/`v23` path stay accepted. No environment variable is added; detached
 history is programmatic and default off. See
 [Overexploitation](overexploitation.md).
+
+`runner-config-v62` is the exact v61 overexploitation family plus mandatory
+`commons_governance` with `policy_id` `commons-governance.v1` and sorted
+WATER `stock_ids`. It requires formal rules plus deterministic founder
+social-norm and institution-concept modes. World replay stays event 29 /
+codec `v27`; pending owner state may use `finalization-command-v7`. Legacy
+v61/v60 documents stay accepted. Capture is programmatic and default off.
+See [Commons governance](commons-governance.md).
 
 ## Optional scientific models (V4-30)
 

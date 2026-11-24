@@ -980,3 +980,34 @@ metric families, 17 V4 contexts, 12 V4 flags (ten owned / two unowned),
 with latest opt-in v59, pending default v1/latest v6, replay 24/`v22` for
 disease, 27/`v25`, and 28/`v26`, `/v1`, `observer-protocol-v1`, Alembic `0017`;
 default runner/result v4/v2. See `docs/medical-beliefs.md`.
+
+V4-36 (ecological resources, 2026-11-23) owns `ecological_feedback` on exact
+`runner-config-v60` with mandatory `ecological_resources`. Local renewable
+stocks degrade and renew under effective capacity; active ecology uses event
+29 / codec `v27` / projector `v2`. No species models, disasters coupling,
+commands, routes, or metric-catalog append. Ownership becomes eleven V4 flags
+owned / only `disasters` unowned. See `docs/ecological-resources.md`.
+
+V4-37 (overexploitation, 2026-11-24) deepens owned ecology on exact
+`runner-config-v61` with mandatory `overexploitation` (`overexploitation.v1`).
+Ordinary draws may exceed healthy regeneration; pressure lowers productive
+capacity while owner suspicion stays fallible. Physical pair remains 29/`v27`.
+See `docs/overexploitation.md`.
+
+V4-38 (commons governance, 2026-11-24) adds voluntary owner-scoped shared-stock
+evidence on exact `runner-config-v62` (v61 family plus mandatory
+`commons_governance` / `commons-governance.v1` and sorted WATER `stock_ids`).
+Requires formal rules and deterministic founder social-norm plus
+institution-concept modes. Monitoring is visible stock quantity only; bounded
+`cgo_v1` speech carries proposals, support, claims, self-reports, and
+criticism; uncontested accepted rest/out-of-turn may voluntarily replace
+`Drink` with `Wait` when thirst is below 0.65. No policy authority, turn
+scheduler, sanction executor, or physical admission change. Pending uses
+`finalization-command-v7` / `commons-governance-state-v1`. Programmatic
+`commons-governance-report-v1` and off-gate paired experiments
+`commons_governance@1` / `commons_governance_two_pools@1` stay detached.
+Pins: 275 metric families, 17 V4 contexts, 12 V4 flags (eleven owned / one
+unowned; only `disasters` remains unowned), 45 commands, 73 observer semantic
+types, runner default v4 with latest opt-in v62, pending default v1/latest v7,
+ecology replay 29/`v27`, `/v1`, `observer-protocol-v1`, Alembic `0017`; default
+result v2. See `docs/commons-governance.md`.

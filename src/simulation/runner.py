@@ -112,6 +112,17 @@ from simulation.cognition_trace import (
     CognitionTraceRepository,
     select_cognition_trace_repository,
 )
+from simulation.commons_governance_evidence import (
+    CommonsGovernanceBoundarySink,
+    CommonsGovernanceConsiderationDelta,
+    CommonsGovernanceOwnerDelta,
+    CommonsGovernanceProposalHead,
+    CommonsGovernanceTransitionDelta,
+    boundary_from_tick_result,
+)
+from simulation.commons_governance_evidence import (
+    CommonsGovernanceCaptureStatus as CommonsGovernanceRunnerCaptureStatus,
+)
 from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
 from simulation.cultural_evidence import (
     CulturalBoundaryExport,
@@ -2183,6 +2194,11 @@ class SimulationRunner:
         "_civilization_capture",
         "_closed",
         "_cognition_counters",
+        "_commons_governance_boundary_sink",
+        "_commons_governance_capture_failed",
+        "_commons_governance_capture_failure_boundary",
+        "_commons_governance_capture_failure_code",
+        "_commons_governance_capture_last_boundary",
         "_config",
         "_crash_hook",
         "_criteria",
@@ -2300,6 +2316,13 @@ class SimulationRunner:
         self._cultural_capture_failure_code: str | None = None
         self._cultural_capture_last_boundary: int | None = None
         self._cultural_missing_prefix_through: int | None = None
+        self._commons_governance_boundary_sink: (
+            CommonsGovernanceBoundarySink | None
+        ) = None
+        self._commons_governance_capture_failed = False
+        self._commons_governance_capture_failure_boundary: int | None = None
+        self._commons_governance_capture_failure_code: str | None = None
+        self._commons_governance_capture_last_boundary: int | None = None
         self._lineage_boundary_sink: object | None = None
         self._lineage_capture_failed = False
         self._lineage_capture_failure_boundary: int | None = None
@@ -3679,6 +3702,7 @@ class SimulationRunner:
             )
         self._ensure_started()
         await self._publish_initial_cultural_boundary()
+        self._publish_initial_commons_governance_boundary()
         await self._publish_initial_lineage_boundary()
         await self._publish_initial_civilization_boundary()
         if self._finished_result is not None:
@@ -3811,6 +3835,10 @@ class SimulationRunner:
                 pendings=tuple(pendings),
                 commands=tuple(commands),
                 tick_result=tick_result,
+            )
+            # Capture commons deltas before terminal-owner retirement.
+            self._publish_commons_governance_boundary_if_complete(
+                tick_value + 1, result=tick_result
             )
             await self._retire_terminal_active_ordinals()
             if self._config.generational_run is not None:
@@ -4214,6 +4242,9 @@ class SimulationRunner:
                 tick_result=tick_result,
             )
             await self._sync_mid_run_population_entries()
+            self._publish_commons_governance_boundary_if_complete(
+                tick + 1, result=tick_result
+            )
             self._publish_cultural_boundary_if_complete(tick + 1)
             await self._publish_lineage_boundary_if_complete(tick + 1)
             await self._publish_civilization_boundary_if_complete(
@@ -4365,6 +4396,272 @@ class SimulationRunner:
                 capture.note_missing_prefix(0)
                 return
         await self._publish_civilization_boundary_if_complete(0)
+
+    def set_commons_governance_boundary_sink(
+        self, sink: CommonsGovernanceBoundarySink | None
+    ) -> None:
+        """Install the observational commons sink once before execution."""
+        if self._started or self._ticks_committed > 0:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="commons_governance_sink_after_start",
+            )
+        if self._commons_governance_boundary_sink is not None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="commons_governance_sink_replacement",
+            )
+        if sink is not None and not isinstance(sink, CommonsGovernanceBoundarySink):
+            raise TypeError("sink must implement CommonsGovernanceBoundarySink")
+        self._commons_governance_boundary_sink = sink
+        _LOG.debug(
+            "commons_governance_capture_sink_installed run_id=%s active=%s",
+            self._run_id.value,
+            sink is not None,
+        )
+
+    def export_commons_governance_capture_status(
+        self,
+    ) -> CommonsGovernanceRunnerCaptureStatus | None:
+        """Return runner-owned commons capture health when a sink is installed."""
+        if self._commons_governance_boundary_sink is None:
+            return None
+        if self._commons_governance_capture_failed:
+            return CommonsGovernanceRunnerCaptureStatus.UNAVAILABLE
+        if self._commons_governance_capture_last_boundary is None:
+            return CommonsGovernanceRunnerCaptureStatus.UNAVAILABLE
+        return CommonsGovernanceRunnerCaptureStatus.COMPLETE
+
+    def _mark_commons_governance_capture_failure(
+        self, boundary_tick: int, code: str
+    ) -> None:
+        if self._commons_governance_capture_failed:
+            return
+        self._commons_governance_capture_failed = True
+        self._commons_governance_capture_failure_boundary = boundary_tick
+        self._commons_governance_capture_failure_code = code
+        _LOG.warning(
+            "commons_governance_capture_failed run_id=%s boundary_tick=%s "
+            "reason_code=%s",
+            self._run_id.value,
+            boundary_tick,
+            code,
+        )
+
+    def _build_commons_governance_owner_deltas(
+        self, *, committed_tick: int | None
+    ) -> tuple[CommonsGovernanceOwnerDelta, ...]:
+        from agents.cognition.commons_governance import (
+            CommonsEvidenceCode,
+            CommonsLedger,
+            proposal_is_contested,
+            proposal_is_supported,
+        )
+        from world.models import LifeStatus
+        from world.values import round_physical
+
+        body_by_entity = {
+            body.entity_id: body for body in self._engine.detached_bodies()
+        }
+        entity_by_agent = {
+            registration.agent_id: registration.entity_id
+            for registration in self._engine.ordered_registrations
+        }
+        owners: list[CommonsGovernanceOwnerDelta] = []
+        for runtime in self._runtimes:
+            living = runtime.status is not AgentRuntimeStatus.TERMINAL
+            thirst_tenths: int | None = None
+            entity_id = entity_by_agent.get(runtime.agent_id)
+            body = (
+                None if entity_id is None else body_by_entity.get(entity_id)
+            )
+            if body is not None:
+                living = body.life_status is LifeStatus.ALIVE
+                thirst_tenths = round(round_physical(body.thirst.value) * 10.0)
+            transitions: list[CommonsGovernanceTransitionDelta] = []
+            considerations: list[CommonsGovernanceConsiderationDelta] = []
+            proposals: list[CommonsGovernanceProposalHead] = []
+            ledger = runtime._loop.commons_governance_ledger_if_present()
+            if type(ledger) is CommonsLedger:
+                for transition in ledger.transitions:
+                    if (
+                        committed_tick is not None
+                        and transition.source_tick != committed_tick
+                    ):
+                        continue
+                    transitions.append(
+                        CommonsGovernanceTransitionDelta(
+                            owner_id=transition.owner_id,
+                            stock_id=transition.stock_id,
+                            source_tick=transition.source_tick,
+                            code=transition.code.value
+                            if type(transition.code) is CommonsEvidenceCode
+                            else str(transition.code),
+                            transition_id=transition.transition_id,
+                            quantity_tenths=transition.quantity_tenths,
+                            signal=(
+                                None
+                                if transition.signal is None
+                                else transition.signal.value
+                            ),
+                            proposal_id=transition.proposal_id,
+                            actor_id=transition.actor_id,
+                            stance=(
+                                None
+                                if transition.stance is None
+                                else transition.stance.value
+                            ),
+                            reported_tick=transition.reported_tick,
+                            occurrence_ref=transition.occurrence_ref,
+                        )
+                    )
+                for consideration in ledger.considerations:
+                    if (
+                        committed_tick is not None
+                        and consideration.tick != committed_tick
+                    ):
+                        continue
+                    considerations.append(
+                        CommonsGovernanceConsiderationDelta(
+                            owner_id=consideration.owner_id,
+                            tick=consideration.tick,
+                            target_id=consideration.target_id,
+                            opportunity=consideration.opportunity.value,
+                            choice=consideration.choice.value,
+                            proposal_id=consideration.proposal_id,
+                        )
+                    )
+                for stock in ledger.stocks:
+                    for proposal in stock.proposals:
+                        support_count = sum(
+                            1
+                            for contributor in proposal.contributors
+                            if contributor.stance is not None
+                            and contributor.stance.value == "support"
+                        )
+                        oppose_count = sum(
+                            1
+                            for contributor in proposal.contributors
+                            if contributor.stance is not None
+                            and contributor.stance.value == "oppose"
+                        )
+                        criticism_count = sum(
+                            1
+                            for contributor in proposal.contributors
+                            if contributor.criticize_tick is not None
+                        )
+                        monitor_checks = sum(
+                            1
+                            for transition in ledger.transitions
+                            if transition.stock_id == stock.stock_id
+                            and transition.code is CommonsEvidenceCode.STOCK_CHECKED
+                            and (
+                                committed_tick is None
+                                or transition.source_tick == committed_tick
+                            )
+                        )
+                        recipients: list[EntityId] = []
+                        if proposal.peer_id is not None:
+                            recipients.append(proposal.peer_id)
+                        for contributor in proposal.contributors:
+                            if contributor.speaker_id not in recipients:
+                                recipients.append(contributor.speaker_id)
+                        recipients.sort(key=lambda item: item.value)
+                        absolute = (
+                            committed_tick
+                            if committed_tick is not None
+                            else max(0, ledger.last_processed_tick)
+                        )
+                        proposals.append(
+                            CommonsGovernanceProposalHead(
+                                owner_id=ledger.owner_id,
+                                stock_id=stock.stock_id,
+                                proposal_id=proposal.proposal_id,
+                                topic=proposal.topic,
+                                proposer_id=proposal.proposer_id,
+                                peer_id=proposal.peer_id,
+                                origin_tick=proposal.origin_tick,
+                                supported=proposal_is_supported(proposal),
+                                opposed=oppose_count > 0,
+                                contested=proposal_is_contested(
+                                    proposal, stock, absolute
+                                ),
+                                support_count=support_count,
+                                oppose_count=oppose_count,
+                                access_claim_count=len(proposal.access_claims)
+                                + len(stock.access_claims),
+                                criticism_count=criticism_count,
+                                monitor_check_count=monitor_checks,
+                                eligible_recipient_ids=tuple(recipients),
+                            )
+                        )
+            owners.append(
+                CommonsGovernanceOwnerDelta(
+                    owner_id=runtime.agent_id,
+                    living=living,
+                    transitions=tuple(transitions),
+                    considerations=tuple(considerations),
+                    proposals=tuple(proposals),
+                    thirst_tenths=thirst_tenths,
+                )
+            )
+        owners.sort(key=lambda item: item.owner_id.value)
+        return tuple(owners)
+
+    def _publish_commons_governance_boundary_if_complete(
+        self,
+        boundary_tick: int,
+        *,
+        result: TickResult | None = None,
+    ) -> None:
+        sink = self._commons_governance_boundary_sink
+        if sink is None or self._commons_governance_capture_failed:
+            return
+        if (
+            self._commons_governance_capture_last_boundary is not None
+            and boundary_tick <= self._commons_governance_capture_last_boundary
+        ):
+            return
+        try:
+            committed_tick = None if boundary_tick == 0 else boundary_tick - 1
+            owners = self._build_commons_governance_owner_deltas(
+                committed_tick=committed_tick
+            )
+            frame = boundary_from_tick_result(
+                run_id=self._run_id.value,
+                boundary_tick=boundary_tick,
+                result=result,
+                owners=owners,
+            )
+        except Exception:
+            self._mark_commons_governance_capture_failure(
+                boundary_tick, "capture_build_failed"
+            )
+            return
+        try:
+            sink.capture(frame)
+        except Exception:
+            self._mark_commons_governance_capture_failure(
+                boundary_tick, "capture_failed"
+            )
+            return
+        self._commons_governance_capture_last_boundary = boundary_tick
+        _LOG.debug(
+            "commons_governance_boundary_published run_id=%s boundary_tick=%s "
+            "owner_count=%s",
+            self._run_id.value,
+            boundary_tick,
+            len(frame.owners),
+        )
+
+    def _publish_initial_commons_governance_boundary(self) -> None:
+        if self._commons_governance_boundary_sink is None:
+            return
+        if self._commons_governance_capture_last_boundary is not None:
+            return
+        if self._ticks_committed != 0:
+            return
+        self._publish_commons_governance_boundary_if_complete(0)
 
     def set_cultural_boundary_sink(self, sink: CulturalBoundarySink | None) -> None:
         """Install the observational sink once before execution or restore."""
@@ -4760,6 +5057,7 @@ class SimulationRunner:
                     )
             self._started = True
         await self._publish_initial_cultural_boundary()
+        self._publish_initial_commons_governance_boundary()
         await self._publish_initial_lineage_boundary()
         await self._publish_initial_civilization_boundary()
         _LOG.info(

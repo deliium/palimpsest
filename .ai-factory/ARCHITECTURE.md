@@ -174,16 +174,16 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-34
+### Current baseline through V4-38
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
-| Latest feature runner | `runner-config-v59` for medical beliefs (v58 disease family plus mandatory `medical_beliefs`); `runner-config-v58` remains disease mechanics; `runner-config-v57` remains measurement instruments; accepted `runner-config-v56` carries V4 capability flags |
+| Latest feature runner | `runner-config-v62` for commons governance (v61 overexploitation family plus mandatory `commons_governance`); `runner-config-v61` remains overexploitation; `runner-config-v60` remains ecological resources; `runner-config-v59` remains medical beliefs; accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 45 / 73 |
-| Metric families | 275 (271 after V4-32, plus four V4-33 diffusion families) |
-| Latest replay / codec pair | Disease-active runs use reserved event 24 / codec `v22`; measurement instruments still select `EVENT_SCHEMA_REPLAY_V28` / `v26`; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted |
-| Subjective pending codec | `finalization-command-v6` adds `medical-beliefs-state-v1` to the v5 science/measurement/replication/theory state; `finalization-command-v5` remains competing theories, and default is `finalization-command-v1`; this is not a world replay codec |
+| Metric families | 275 (unchanged by V4-36–V4-38; programmatic commons reports only) |
+| Latest replay / codec pair | Active ecology / overexploitation keep event 29 / codec `v27` / projector `v2`; disease-active runs use reserved event 24 / codec `v22`; measurement instruments still select `EVENT_SCHEMA_REPLAY_V28` / `v26`; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted |
+| Subjective pending codec | `finalization-command-v7` adds `commons-governance-state-v1` to the v6 medical/science/measurement state; `finalization-command-v6` remains medical beliefs; default is `finalization-command-v1`; this is not a world replay codec |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
@@ -1498,3 +1498,37 @@ disease arms. Pins: 275 metric families, 17 V4 contexts, 12 V4 flags (ten owned
 runner v4/v55/v56 with latest opt-in v59, pending default v1/latest v6, replay
 24/`v22` for disease, 27/`v25`, and 28/`v26`, `/v1`, `observer-protocol-v1`,
 Alembic `0017`; default runner/result v4/v2. See `docs/medical-beliefs.md`.
+
+### V4-36 ecological-resources seam
+
+V4-36 owns `ecological_feedback` on exact `runner-config-v60` with mandatory
+`ecological_resources`. Ordinary renewable stocks carry local damage, recovery,
+and seasonal renewal under an effective capacity; no species, disasters, or new
+command surface. Active ecology selects event 29 / codec `v27` / projector
+`v2`. From this landing the owned V4 flag count is eleven; only `disasters`
+remains unowned. See `docs/ecological-resources.md`.
+
+### V4-37 overexploitation seam
+
+V4-37 deepens owned ecology on exact `runner-config-v61` with mandatory
+`overexploitation` (`overexploitation.v1`). Pressure and fallible owner
+inference stay local; the physical pair remains 29/`v27`. See
+`docs/overexploitation.md`.
+
+### V4-38 commons-governance seam
+
+V4-38 adds voluntary owner-scoped commons evidence on exact `runner-config-v62`
+(the v61 overexploitation family plus mandatory `commons_governance` with
+`commons-governance.v1` and sorted WATER `stock_ids`). Prerequisites keep
+formal rules plus deterministic founder social-norm and institution-concept
+modes. Agents fold visible stock-quantity monitoring and bounded `cgo_v1`
+speech into owner-local evidence; uncontested accepted rest/out-of-turn may
+voluntarily replace `Drink` with `Wait` when thirst is below 0.65. Claims,
+turns, sanctions, and access never enter physical admission. Pending uses
+`finalization-command-v7` with `commons-governance-state-v1`; world event 29 /
+`v27` / projector `v2`, commands, observer semantics, `/v1`, metric catalog,
+and Alembic `0017` stay unchanged. Detached programmatic
+`commons-governance-report-v1` and off-gate paired experiments
+`commons_governance@1` / `commons_governance_two_pools@1` stay research-only.
+Pins stay eleven owned V4 flags / one unowned (`disasters`). See
+`docs/commons-governance.md`.

@@ -125,6 +125,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Medical beliefs](docs/medical-beliefs.md) | Owner-scoped subjective disease explanations, bounded interventions and testimony, v59/finalization-v6, detached five-lane evidence |
 | [Ecological resources](docs/ecological-resources.md) | Opt-in local renewable stock damage, seasonal renewal under effective capacity, v60/event-25/`v23` replay |
 | [Overexploitation](docs/overexploitation.md) | Opt-in local overdraw, capacity pressure, fallible owner inference, v61/event-29/`v27` replay |
+| [Commons governance](docs/commons-governance.md) | Voluntary owner-scoped shared-stock evidence, `cgo_v1` speech, paired experiments, v62/finalization-v7 |
 | [Economic cascades](docs/economic-cascades.md) | Five objective disruption classes, observable dependency edges, bounded `linked`/`unlinked`/`unresolved` chains, snapshot/store, seven GET routes, and Research UI panel |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
@@ -166,5 +167,6 @@ Optional V3 civilization overlays (regions, settlements, migration, completed-ex
 - [Medical beliefs](docs/medical-beliefs.md)
 - [Ecological resources](docs/ecological-resources.md)
 - [Overexploitation](docs/overexploitation.md)
+- [Commons governance](docs/commons-governance.md)
 
 Current catalog: 275 metric families (the V4-27 landing reported 250 metric families); 17 V4 contexts / `v4-context-map-v6`; 11 owned / 1 unowned; replay-v27/codec `v25`, 28/`v26`, disease 24/`v22`, and ecology 25/`v23`; Alembic `0017`.

@@ -2842,6 +2842,8 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "measurement_instruments@1",
         "disease_mechanics@1",
         "medical_beliefs@1",
+        "commons_governance@1",
+        "commons_governance_two_pools@1",
     }
 )
 
@@ -5973,6 +5975,49 @@ def experiment_medical_beliefs(
     )
     _LOG.info(
         "experiment_registered experiment_id=medical_beliefs@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_commons_governance(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 64,
+) -> ExperimentDefinition:
+    """Off-gate V4-38 experiment: shared-pool commons governance pair."""
+    from experiments.commons_governance_scenario import (
+        commons_governance_scenario,
+    )
+
+    definition = commons_governance_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=commons_governance@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_commons_governance_two_pools(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 64,
+) -> ExperimentDefinition:
+    """Off-gate V4-38 experiment: two-pools commons governance pair."""
+    from experiments.commons_governance_scenario import (
+        commons_governance_two_pools_scenario,
+    )
+
+    definition = commons_governance_two_pools_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=commons_governance_two_pools@1 "
+        "arms=%s",
         len(definition.conditions),
     )
     return definition
