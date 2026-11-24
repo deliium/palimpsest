@@ -109,6 +109,7 @@ uv run --frozen --python 3.12.14 pytest -m integration \
 
 ## See Also
 
+- [Overexploitation](overexploitation.md) — v61 deepening (pressure receipts, 29/`v27`)
 - [Configuration](configuration.md)
 - [V4 versioning](v4-versioning.md)
 - [Physical Simulation](physical-simulation.md)

@@ -72,7 +72,7 @@ The registry revision is `v4-context-map-v6`.
 | `markets_credit` | `markets_credit` | owner-scoped | `agents.cognition`, `simulation` | exchange profile, commitments | reuse | deferred to V4-02+ |
 | `science` | `science` | owner-scoped | `agents.cognition`, `simulation` | experimentation, practical knowledge, repositories | reuse | V4-27 owned (`formal_rules`) |
 | `epidemics` | `epidemics` | objective-world | `world`, `simulation`, `agents.cognition` | new host/transmission state | reserve event 24 / codec `v22` | deferred to V4-02+ |
-| `ecological_feedback` | `ecological_feedback` | objective-world | `world`, `simulation` | resource regeneration/depletion | event 25 / codec `v23` | owned by V4-36 on `runner-config-v60` |
+| `ecological_feedback` | `ecological_feedback` | objective-world | `world`, `simulation` | resource regeneration/depletion | event 25 / codec `v23`; deepen 29/`v27` | owned by V4-36 on `runner-config-v60`; V4-37 deepens on `v61` |
 | `disasters` | `disasters` | objective-world | `world`, `simulation` | environmental hazards | reserve event 26 / codec `v24` | deferred to V4-02+ |
 | `societal_resilience` | — (analysis-only) | detached-analysis | `analysis` | new detached classification | reuse | deferred to V4-02+ |
 | `macro_society_identity` | — (analysis-only) | detached-analysis | `analysis` | candidate-community analysis, cultural/institutional evidence joins, group persistence | reuse | V4-02 implementation |
@@ -193,9 +193,13 @@ Resource regeneration and depletion already exist as engine rules. V4-36 owns
 `ecological_feedback` on `runner-config-v60`: selected renewable nodes accumulate
 withdrawal-induced capacity damage, recover while idle, and regrow under the
 existing seasonal schedule clipped to the local effective ceiling. The write
-pair is event schema 25 / codec `v23`. Local stock ceilings are never population
-quotas, planners, or automatic carrying-capacity policy. See
-[Ecological resources](ecological-resources.md).
+pair is event schema 25 / codec `v23`. V4-37 deepens the same owned flag on
+`runner-config-v61` with `overexploitation.v1`: withdrawal above capacity-scaled
+healthy potential raises damage and scales future renewal, writing event schema
+29 / codec `v27`. Local stock ceilings are never population quotas, planners, or
+automatic carrying-capacity policy. See
+[Ecological resources](ecological-resources.md) and
+[Overexploitation](overexploitation.md).
 
 ### disasters
 

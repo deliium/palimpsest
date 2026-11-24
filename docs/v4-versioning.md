@@ -73,10 +73,19 @@ A reservation is a number, not semantics. `simulation.versioning` reserves:
 | `ecological_feedback` | 25 | `v23` | `ecological_feedback` | `world` |
 | `disasters` | 26 | `v24` | `disasters` | `world` |
 
+Deepening write pairs (already-owned contexts; contiguous after reservations):
+
+| Context | Event schema | Codec | Owner plan |
+| --- | --- | --- | --- |
+| `infrastructure_networks` | 27 | `v25` | travel-network routes |
+| `science` | 28 | `v26` | measurement instruments |
+| `ecological_feedback` | 29 | `v27` | V4-37 overexploitation on `runner-config-v61` |
+
 The other nine contexts are declared event-reusing
 (`V4_EVENT_REUSING_CONTEXTS`): they must express their phenomena through existing
 commands, events, records, and speech. A later plan that activates a reservation
 must still prove effect-complete details, replay, and a persistence need.
+`disasters` remains reserved and unowned.
 
 ## Observer negotiation
 

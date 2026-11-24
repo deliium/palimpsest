@@ -318,8 +318,10 @@ that may construct on the accepted v56 seam: `organizations`
 exact `runner-config-v58` `disease_mechanics` sibling), and
 `ecological_feedback` (V4-36, requiring `supply_chains`,
 `environmental_dynamics`, and the exact `runner-config-v60`
-`ecological_resources` sibling). The remaining V4 flag — `disasters` —
-stays unowned and fails closed at `SimulationRunner.from_config`.
+`ecological_resources` sibling; deepened by V4-37 on `runner-config-v61`
+with the exact `overexploitation` sibling while keeping the same owned
+flag). The remaining V4 flag — `disasters` — stays unowned and fails closed
+at `SimulationRunner.from_config`.
 
 ## Organized conflict (`runner-config-v56`)
 
@@ -671,6 +673,14 @@ programmatic and default off. See [Medical beliefs](medical-beliefs.md).
 when owned `ecological_feedback` is on, requires `supply_chains`, and writes
 reserved replay event 25 / codec `v23`. Local stock ceilings never become
 population quotas. See [Ecological resources](ecological-resources.md).
+
+`runner-config-v61` is the exact v60 ecology family plus mandatory
+`overexploitation: {"policy_id": "overexploitation.v1"}`. It is selected only
+when that sibling is present, requires the v60 ecology prerequisites, and
+writes deepening replay event 29 / codec `v27`. Legacy v60 documents and the
+25/`v23` path stay accepted. No environment variable is added; detached
+history is programmatic and default off. See
+[Overexploitation](overexploitation.md).
 
 ## Optional scientific models (V4-30)
 

@@ -632,7 +632,7 @@ leaves the lane unexecuted with its blocker; it is never reported as a pass.
 See [Disputes](disputes.md) and
 [Research UI](research-ui.md).
 
-Current catalog: 275 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; 10 owned / 2 unowned V4 flags; replay-v27/codec `v25`, 28/`v26`, and disease 24/`v22`; Alembic `0017`.
+Current catalog: 275 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; 11 owned / 1 unowned V4 flags; replay-v27/codec `v25`, 28/`v26`, disease 24/`v22`, ecology 25/`v23`, and overexploitation 29/`v27`; Alembic `0017`.
 
 V4-27 scientific hypotheses: verify with `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q`. The science seam keeps 17 V4 contexts / `v4-context-map-v6`, 250 families, replay-v27/codec `v25`, and Alembic `0017`.
 
@@ -658,6 +658,24 @@ PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 \
 
 The disposable-DB lane is unexecuted when `PALIMPSEST_TEST_DATABASE_URL` is
 unset; that is not a pass. See [Disease mechanics](disease-mechanics.md).
+
+## Overexploitation verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_overexploitation_*.py \
+  tests/unit/test_ecological_resources_*.py \
+  tests/unit/test_v1_regression_gate.py \
+  tests/unit/test_v2_scientific_invariants.py \
+  tests/unit/test_v4_scaffolding_gate.py \
+  tests/unit/test_compatibility_matrix.py \
+  tests/unit/test_v4_versioning_reservations.py \
+  tests/unit/test_v4_migration_plan.py \
+  tests/architecture/test_v4_architecture_invariants.py -q
+```
+
+See [Overexploitation](overexploitation.md). Disposable-DB durability for the
+ecology/overexploitation family is unexecuted when
+`PALIMPSEST_TEST_DATABASE_URL` is unset; that is not a pass.
 
 ## Scientific-model verification
 

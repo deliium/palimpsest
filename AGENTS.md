@@ -92,6 +92,7 @@ also cover searches and shell access; they are behavioral rules for other agents
 | Disease mechanics | `docs/disease-mechanics.md` | Opt-in abstract epidemics channel, private infection state, symptom cues only, v58/event-24/`v22` replay |
 | Medical beliefs | `docs/medical-beliefs.md` | Owner-scoped subjective disease explanations, bounded interventions and testimony, v59/finalization-v6, detached five-lane evidence |
 | Ecological resources | `docs/ecological-resources.md` | Opt-in local renewable stock damage, seasonal renewal under effective capacity, v60/event-25/`v23` replay |
+| Overexploitation | `docs/overexploitation.md` | Opt-in local overdraw, capacity pressure, fallible owner inference, v61/event-29/`v27` replay |
 | Lineage explorer | `docs/lineage-explorer.md` | Eight-family read-only lineage graph API, optional capture, cursors and availability semantics |
 | Observer | `docs/observer.md` | Read-only region and journey presentation |
 | Physical simulation | `docs/physical-simulation.md` | Discrete journeys, fatigue, capacity, and death |
