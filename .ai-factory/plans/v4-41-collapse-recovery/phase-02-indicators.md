@@ -1,7 +1,7 @@
 # Phase 2: Indicators, collapse patterns and recovery
 
-Plan: [index.md](index.md)  
-Tasks: 3–4  
+Plan: [index.md](index.md)
+Tasks: 3–4
 Depends on: Task 2
 
 ## Objective

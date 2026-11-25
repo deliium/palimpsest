@@ -18,28 +18,28 @@ Do not create a CivilizationCollapsed boolean as the causal mechanism.
 Define analytical collapse indicators from combinations of:
 
 - population decline
-    
+
 - institutional failure
-    
+
 - knowledge loss
-    
+
 - trade disruption
-    
+
 - infrastructure decay
-    
+
 - migration
-    
+
 - conflict
-    
+
 - production decline
-    
+
 
 Allow:
 
-recovery  
-fragmentation  
-successor societies  
-institutional continuity  
+recovery
+fragmentation
+successor societies
+institutional continuity
 technology loss
 
 Track lineage across societal fragmentation.
@@ -52,7 +52,7 @@ Track lineage across societal fragmentation.
 
 ## Roadmap Linkage
 
-Milestone: "M8 — V4 Open-Ended Civilizations (in progress)"  
+Milestone: "M8 — V4 Open-Ended Civilizations (in progress)"
 Rationale: V4-41 is detached M8 research composition, adjacent to V4-40; it adds no world or societal authority and does not close M8.
 
 ## Requirements Reconciliation

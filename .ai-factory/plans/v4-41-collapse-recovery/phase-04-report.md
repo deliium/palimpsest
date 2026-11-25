@@ -1,7 +1,7 @@
 # Phase 4: Report, qualification and documentation
 
-Plan: [index.md](index.md)  
-Tasks: 7–9  
+Plan: [index.md](index.md)
+Tasks: 7–9
 Depends on: Tasks 3–6
 
 ## Objective

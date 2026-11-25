@@ -1,7 +1,7 @@
 # Phase 1: Finalized collapse evidence
 
-Plan: [index.md](index.md)  
-Tasks: 1–2  
+Plan: [index.md](index.md)
+Tasks: 1–2
 Depends on: none
 
 ## Objective

@@ -1,7 +1,7 @@
 # Phase 3: Fragmentation and successor lineage
 
-Plan: [index.md](index.md)  
-Tasks: 5–6  
+Plan: [index.md](index.md)
+Tasks: 5–6
 Depends on: Task 2 for Task 5; Tasks 3–5 for Task 6
 
 ## Objective
