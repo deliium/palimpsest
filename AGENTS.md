@@ -95,6 +95,7 @@ also cover searches and shell access; they are behavioral rules for other agents
 | Overexploitation | `docs/overexploitation.md` | Opt-in local overdraw, capacity pressure, fallible owner inference, v61/event-29/`v27` replay |
 | Commons governance | `docs/commons-governance.md` | Voluntary owner-scoped shared-stock evidence, `cgo_v1` speech, paired experiments, v62/finalization-v7 |
 | Disasters | `docs/disasters.md` | Opt-in configured objective shocks, seeded schedule/spontaneous draws, v63/event-26/`v24` replay |
+| Societal resilience | `docs/societal-resilience.md` | Detached ten-panel shock-response series, programmatic report, no composite score |
 | Lineage explorer | `docs/lineage-explorer.md` | Eight-family read-only lineage graph API, optional capture, cursors and availability semantics |
 | Observer | `docs/observer.md` | Read-only region and journey presentation |
 | Physical simulation | `docs/physical-simulation.md` | Discrete journeys, fatigue, capacity, and death |

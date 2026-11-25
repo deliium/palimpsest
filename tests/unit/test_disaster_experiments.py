@@ -21,6 +21,10 @@ from experiments.disaster_scenario import (
     DISASTERS_EXPERIMENT_ID,
     disasters_scenario,
 )
+from tests.fakes.resilience_disaster_fixture import (
+    drought_schedule_entry,
+    drought_stock_base,
+)
 from experiments.models import (
     condition_fingerprint,
 )
@@ -569,17 +573,8 @@ def _kind_cases() -> list[tuple[str, SimulationRunnerConfig, DisasterScheduleEnt
         ),
         (
             "drought",
-            _stock_base(
-                rule=_loss_rule(
-                    "drought-a",
-                    kind=DisasterKind.DROUGHT,
-                    resource_id="res-target",
-                ),
-                target_kind=ResourceKind.WATER,
-                weather=WeatherCondition.CLEAR,
-                nontarget_kind=ResourceKind.FOOD,
-            ),
-            DisasterScheduleEntry(tick=_INJECT, rule_id="drought-a"),
+            drought_stock_base(),
+            drought_schedule_entry(tick=_INJECT),
         ),
         (
             "resource_collapse",

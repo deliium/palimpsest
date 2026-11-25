@@ -1021,3 +1021,10 @@ migration. Pins: 275 metric families, 17 V4 contexts, 12 V4 flags (all owned),
 v63, ecology replay 29/`v27`, disaster replay 26/`v24`, `/v1`,
 `observer-protocol-v1`, Alembic `0017`; default result v2. See
 `docs/disasters.md`.
+
+V4-40 (societal resilience, 2026-11-25) lands detached analysis-only
+`societal_resilience`: ten independent shock-response panels and programmatic
+`societal-resilience-report-v1` via opt-in
+`run_with_resilience_capture`. No composite score, new authority, route,
+metric-catalog append, or SQL migration. Pins unchanged from V4-39. See
+`docs/societal-resilience.md`.

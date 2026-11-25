@@ -691,6 +691,21 @@ uv run --frozen --python 3.12.14 pytest tests/unit/test_disaster_*.py \
 
 See [Disasters](disasters.md). No Alembic migration; head stays `0017`.
 
+## Societal resilience verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_resilience*.py \
+  tests/architecture/test_resilience_boundaries.py \
+  tests/unit/test_disaster_experiments.py \
+  tests/unit/test_disaster_replay.py \
+  tests/unit/test_v1_regression_gate.py \
+  tests/unit/test_v2_scientific_invariants.py \
+  tests/unit/test_alembic_head_pin.py -q
+```
+
+See [Societal resilience](societal-resilience.md). Analysis-only; no new route,
+metric-catalog append, or Alembic migration.
+
 ## Scientific-model verification
 
 ```bash

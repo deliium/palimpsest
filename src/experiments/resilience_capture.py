@@ -10,6 +10,12 @@ import logging
 from dataclasses import dataclass
 from typing import Final, Literal
 
+from analysis.resilience_report import (
+    ResilienceReport,
+    ResilienceReportInputs,
+    build_resilience_report,
+)
+from analysis.resilience_report_codec import encode_resilience_report
 from analysis.resilience_windows import (
     ScheduleEntry,
     ShockReceipt,
@@ -23,7 +29,6 @@ from simulation.resilience_evidence import (
     MAX_RESILIENCE_ROSTER,
     ResilienceBatchEvents,
     ResilienceBoundaryFacts,
-    ResilienceEvidenceError,
     count_normalized_rows,
     project_resilience_batch_events,
 )
@@ -49,6 +54,7 @@ CaptureStatus = Literal[
     "captured",
     "sealed",
     "aborted",
+    "report_failed",
 ]
 
 
@@ -68,11 +74,12 @@ class ResilienceSealedEvidence:
 
 @dataclass(frozen=True, slots=True)
 class ResilienceCaptureResult:
-    """Original runner result plus closed capture status."""
+    """Original runner result plus closed capture status and optional report."""
 
     result: object
     status: CaptureStatus
-    evidence: ResilienceSealedEvidence | None
+    report: ResilienceReport | None
+    evidence: ResilienceSealedEvidence | None = None
     reason_code: str | None = None
 
 
@@ -223,7 +230,9 @@ async def _sample_boundary(
 ) -> bool:
     frame = await runner.export_resilience_boundary()
     if type(frame) is not ResilienceBoundaryFacts:
-        raise TypeError("export_resilience_boundary must return ResilienceBoundaryFacts")
+        raise TypeError(
+            "export_resilience_boundary must return ResilienceBoundaryFacts"
+        )
     batch: ResilienceBatchEvents | None = None
     if expect_batch:
         tick_result = runner.engine.last_tick_result
@@ -262,6 +271,7 @@ async def run_with_resilience_capture(
         return ResilienceCaptureResult(
             result=result,
             status="disabled",
+            report=None,
             evidence=None,
             reason_code="capture_disabled",
         )
@@ -277,6 +287,7 @@ async def run_with_resilience_capture(
         return ResilienceCaptureResult(
             result=result,
             status="unsupported",
+            report=None,
             evidence=None,
             reason_code=reason,
         )
@@ -339,6 +350,7 @@ async def run_with_resilience_capture(
         return ResilienceCaptureResult(
             result=result,
             status="aborted",
+            report=None,
             evidence=None,
             reason_code="scientific_abort",
         )
@@ -401,16 +413,67 @@ async def run_with_resilience_capture(
     )
     if accumulator.sealed:
         status = "sealed"
+    report: ResilienceReport | None
+    try:
+        config = runner.config
+        location_regions: dict[str, str] = {}
+        regions = getattr(config, "regions_migration", None)
+        if regions is not None:
+            mapping = getattr(regions, "location_to_region", None)
+            if isinstance(mapping, dict):
+                location_regions = {
+                    str(key): str(value) for key, value in mapping.items()
+                }
+        report = build_resilience_report(
+            ResilienceReportInputs(
+                run_id=evidence.run_id,
+                config_fingerprint=evidence.config_fingerprint,
+                finalized_through=evidence.finalized_through,
+                capture_through=evidence.capture_through,
+                capture_status=status if status in {"captured", "sealed"} else "sealed",
+                frames=evidence.frames,
+                batches=evidence.batches,
+                schedule=tuple(
+                    (entry.tick, entry.rule_id) for entry in evidence.schedule
+                ),
+                regions_migration_enabled=getattr(config, "regions_migration", None)
+                is not None,
+                subjective_valuation_enabled=getattr(
+                    config, "subjective_valuation", None
+                )
+                is not None,
+                projects_enabled=(
+                    getattr(config, "collective_projects", None) is not None
+                ),
+                location_regions=location_regions,
+            )
+        )
+        encode_resilience_report(report)
+    except Exception:
+        _LOG.warning(
+            "resilience_report_failed run_id=%s",
+            result.run_id.value,
+        )
+        return ResilienceCaptureResult(
+            result=result,
+            status="report_failed",
+            report=None,
+            evidence=evidence,
+            reason_code="report_failed",
+        )
     _LOG.info(
-        "resilience_capture_complete run_id=%s status=%s frames=%s events=%s",
+        "resilience_capture_complete run_id=%s status=%s frames=%s events=%s "
+        "episodes=%s",
         result.run_id.value,
         status,
         len(evidence.frames),
         sum(batch.event_count for batch in evidence.batches),
+        len(report.episodes),
     )
     return ResilienceCaptureResult(
         result=result,
         status=status,
+        report=report,
         evidence=evidence,
         reason_code=accumulator.seal_reason,
     )

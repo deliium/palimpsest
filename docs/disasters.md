@@ -1,6 +1,6 @@
 # Disasters
 
-[← Commons governance](commons-governance.md) · [Back to README](../README.md) · [Configuration →](configuration.md)
+[← Commons governance](commons-governance.md) · [Back to README](../README.md) · [Societal resilience →](societal-resilience.md)
 
 Optional rare objective shocks owned by V4-39 under `disasters`. Exact
 `runner-config-v63` plus `disasters.v1` schedule bounded one-tick pulses against

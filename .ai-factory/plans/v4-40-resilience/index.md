@@ -91,14 +91,14 @@ Authority: The original request defines the outcome and prohibitions. `.ai-facto
 
 ### Phase 2: Ten independent resilience time series
 
-- [ ] Task 4: Reduce physical and network response ([details](phase-02-series.md#task-4-reduce-physical-and-network-response)) (depends on 3)
-- [ ] Task 5: Reduce owner-scoped and distributional response ([details](phase-02-series.md#task-5-reduce-owner-scoped-and-distributional-response)) (depends on 3, 4)
+- [x] Task 4: Reduce physical and network response ([details](phase-02-series.md#task-4-reduce-physical-and-network-response)) (depends on 3)
+- [x] Task 5: Reduce owner-scoped and distributional response ([details](phase-02-series.md#task-5-reduce-owner-scoped-and-distributional-response)) (depends on 3, 4)
 
 ### Phase 3: Research report, qualification, and docs
 
-- [ ] Task 6: Build and encode the detached report ([details](phase-03-report.md#task-6-build-and-encode-the-detached-report)) (depends on 4, 5)
-- [ ] Task 7: Qualify against V4-39 and keep compatibility pinned ([details](phase-03-report.md#task-7-qualify-against-v4-39-and-keep-compatibility-pinned)) (depends on 6)
-- [ ] Task 8: Document use, comparability, and limits ([details](phase-03-report.md#task-8-document-use-comparability-and-limits)) (depends on 7)
+- [x] Task 6: Build and encode the detached report ([details](phase-03-report.md#task-6-build-and-encode-the-detached-report)) (depends on 4, 5)
+- [x] Task 7: Qualify against V4-39 and keep compatibility pinned ([details](phase-03-report.md#task-7-qualify-against-v4-39-and-keep-compatibility-pinned)) (depends on 6)
+- [x] Task 8: Document use, comparability, and limits ([details](phase-03-report.md#task-8-document-use-comparability-and-limits)) (depends on 7)
 
 ## Commit Plan
 
@@ -113,3 +113,23 @@ Authority: The original request defines the outcome and prohibitions. `.ai-facto
 - Measurements disclose scope, units, comparison basis and denominators; lack of recovery is a valid outcome, not a failed fixture.
 - Run execution, replay, compatibility pins, study inputs, and all trust boundaries are unchanged with capture absent or present.
 - Verified focused and full local coverage runs plus static checks are recorded; docs checkpoint and roadmap status reflect the actual implementation without broad certification claims.
+
+## Verification Receipt (2026-11-25)
+
+Focused:
+
+```text
+uv run --frozen --python 3.12.14 pytest tests/unit/test_resilience*.py \
+  tests/architecture/test_resilience_boundaries.py \
+  tests/unit/test_disaster_experiments.py \
+  tests/unit/test_disaster_replay.py \
+  tests/unit/test_alembic_head_pin.py -q
+→ 61 passed
+```
+
+Also: resilience-only suite 46 passed; `ruff check` on new resilience modules clean;
+`mypy` on resilience modules clean; `git diff --check` clean.
+
+Out of changed surface / unexecuted here: full-repo `pytest` with coverage,
+Compose, PostgreSQL disposable DB, Godot, browser, and long-horizon scale
+profiles.

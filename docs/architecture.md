@@ -862,7 +862,9 @@ Current catalog: 275 metric families (the V4-27 landing reported 250 metric fami
 
 Twelve V4 flags are owned, including `ecological_feedback` (V4-36) and
 `disasters` (V4-39). Disaster-active runs use reserved event 26 / codec `v24`.
-See [Disasters](disasters.md).
+See [Disasters](disasters.md). Detached `societal_resilience` (V4-40) consumes
+finalized disaster evidence into ten independent panels with no composite score,
+route, or catalog append. See [Societal resilience](societal-resilience.md).
 
 ## V4-23 accounting ledgers
 
