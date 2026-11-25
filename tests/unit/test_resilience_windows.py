@@ -103,7 +103,7 @@ def test_event_at_s_s1_s8_s64_boundaries() -> None:
     first = with_later.episodes[0]
     assert first.windows[1].coverage is WindowCoverage.COMPLETE
     assert first.windows[1].reason is None
-    # Shock at s+64 lands at start of post slot 8 which does not exist; post7 ends at s+64.
+    # Shock at s+64 starts nonexistent post slot 8; post7 ends at s+64.
     assert first.windows[8].end_tick == shock + 64
 
 
@@ -191,7 +191,10 @@ def test_schedule_dispositions_and_non_applied_counts() -> None:
         capture_through=20,
         schedule=schedule,
     )
-    by_key = {(row.tick, row.rule_id): row.disposition for row in built.schedule_dispositions}
+    by_key = {
+        (row.tick, row.rule_id): row.disposition
+        for row in built.schedule_dispositions
+    }
     assert by_key[(8, "sched-1")] is ScheduleDisposition.APPLIED
     assert by_key[(12, "sched-2")] is ScheduleDisposition.NOT_APPLIED
     assert by_key[(40, "future")] is ScheduleDisposition.NOT_REACHED
@@ -210,7 +213,10 @@ def test_receipt_missing_blocks_no_shock() -> None:
         schedule=(ScheduleEntry(tick=4, rule_id="missing"),),
     )
     assert built.episodes == ()
-    assert built.schedule_dispositions[0].disposition is ScheduleDisposition.RECEIPT_MISSING
+    assert (
+        built.schedule_dispositions[0].disposition
+        is ScheduleDisposition.RECEIPT_MISSING
+    )
     assert built.no_shock is False
 
 
@@ -367,7 +373,10 @@ def test_config_alone_never_infers_shock() -> None:
     )
     assert built.episodes == ()
     assert built.no_shock is False
-    assert built.schedule_dispositions[0].disposition is ScheduleDisposition.RECEIPT_MISSING
+    assert (
+        built.schedule_dispositions[0].disposition
+        is ScheduleDisposition.RECEIPT_MISSING
+    )
 
 
 def test_window_axis_immutable_and_fixed_length() -> None:

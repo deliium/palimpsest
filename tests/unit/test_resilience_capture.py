@@ -21,7 +21,6 @@ from simulation.models import RunId
 from simulation.resilience_evidence import (
     OwnerLaneState,
     ResilienceBoundaryFacts,
-    ResilienceEvidenceError,
 )
 from simulation.runner import RunnerDependencyFactories, SimulationRunner
 from simulation.runner_models import (
@@ -34,7 +33,12 @@ from simulation.runner_models import (
     V4CapabilityFlags,
     WorldScenarioSpec,
 )
-from tests.simulation_helpers import alive_body, make_location, make_resource, make_weather
+from tests.simulation_helpers import (
+    alive_body,
+    make_location,
+    make_resource,
+    make_weather,
+)
 from world.disasters import (
     DisasterKind,
     DisasterLossEffect,
@@ -220,6 +224,31 @@ async def test_capture_on_samples_prefix_without_double_finish() -> None:
     assert captured.evidence.capture_through == captured.result.ticks_committed
     assert captured.evidence.frames[-1].boundary_tick == captured.result.ticks_committed
     # No second finish: finished result already present.
+    assert captured.result.ticks_committed == 3
+
+
+@pytest.mark.asyncio
+async def test_capture_never_calls_whole_history_export_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from simulation.engine import WorldEngine
+
+    config = _v63_config(max_ticks=3)
+    runner = await SimulationRunner.from_config(
+        config,
+        run_id=RunId("run-resilience-no-export"),
+        factories=RunnerDependencyFactories(),
+    )
+
+    def _forbid_export_events(self: WorldEngine) -> None:
+        raise AssertionError("capture must not call export_events()")
+
+    # Instance methods on slotted engines are read-only; patch the class.
+    monkeypatch.setattr(WorldEngine, "export_events", _forbid_export_events)
+    async with runner:
+        captured = await run_with_resilience_capture(runner, capture=True)
+    assert captured.status in {"captured", "sealed"}
+    assert captured.evidence is not None
     assert captured.result.ticks_committed == 3
 
 

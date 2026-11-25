@@ -10,7 +10,6 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from types import MappingProxyType
 from typing import Final
 
 from world.identifiers import require_exact_nonneg_int, require_stable_id
@@ -134,7 +133,9 @@ class ResilienceStockRow:
             self, "stock_id", require_stable_id("stock_id", self.stock_id)
         )
         object.__setattr__(
-            self, "resource_kind", require_stable_id("resource_kind", self.resource_kind)
+            self,
+            "resource_kind",
+            require_stable_id("resource_kind", self.resource_kind),
         )
         object.__setattr__(self, "unit", require_stable_id("unit", self.unit))
         object.__setattr__(
@@ -276,7 +277,7 @@ class ResilienceBoundaryFacts:
             raise ResilienceEvidenceError("resilience_evidence_invalid_input")
         if type(self.ecology_channel) is not OwnerLaneState:
             raise ResilienceEvidenceError("resilience_evidence_invalid_input")
-        for name, rows, model in (
+        for _name, rows, model in (
             ("bodies", self.bodies, ResilienceBodyRow),
             ("stocks", self.stocks, ResilienceStockRow),
             ("infrastructure", self.infrastructure, ResilienceInfrastructureRow),
