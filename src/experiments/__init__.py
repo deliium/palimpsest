@@ -296,6 +296,10 @@ from experiments.disaster_scenario import (
     bind_disasters_experiment_runner,
     disasters_scenario,
 )
+from experiments.collapse_recovery_capture import (
+    CollapseCaptureResult,
+    run_with_collapse_recovery_capture,
+)
 from experiments.resilience_capture import (
     ResilienceCaptureResult,
     run_with_resilience_capture,
@@ -1057,6 +1061,8 @@ __all__ = [
     "run_benchmark_smoke",
     "run_one_assignment",
     "run_with_medical_beliefs_capture",
+    "run_with_collapse_recovery_capture",
+    "CollapseCaptureResult",
     "run_with_resilience_capture",
     "ResilienceCaptureResult",
     "scientific_hypotheses_scenario",

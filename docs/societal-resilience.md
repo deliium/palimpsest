@@ -1,6 +1,6 @@
 # Societal resilience
 
-[← Disasters](disasters.md) · [Back to README](../README.md) · [Configuration →](configuration.md)
+[← Disasters](disasters.md) · [Back to README](../README.md) · [Collapse and recovery →](collapse-recovery.md)
 
 Detached analysis-only shock-response panels owned by V4-40 under
 `societal_resilience`. Opt-in capture over a finalized v63 disasters-active run

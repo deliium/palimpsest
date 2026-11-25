@@ -706,6 +706,19 @@ uv run --frozen --python 3.12.14 pytest tests/unit/test_resilience*.py \
 See [Societal resilience](societal-resilience.md). Analysis-only; no new route,
 metric-catalog append, or Alembic migration.
 
+## Collapse and recovery verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_collapse_recovery*.py \
+  tests/architecture/test_collapse_recovery_boundaries.py \
+  tests/unit/test_v1_regression_gate.py \
+  tests/unit/test_v2_scientific_invariants.py \
+  tests/unit/test_alembic_head_pin.py -q
+```
+
+See [Collapse and recovery](collapse-recovery.md). Analysis-only; disasters are
+not required; no new route, metric-catalog append, or Alembic migration.
+
 ## Scientific-model verification
 
 ```bash

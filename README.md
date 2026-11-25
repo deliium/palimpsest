@@ -128,6 +128,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Commons governance](docs/commons-governance.md) | Voluntary owner-scoped shared-stock evidence, `cgo_v1` speech, paired experiments, v62/finalization-v7 |
 | [Disasters](docs/disasters.md) | Opt-in configured objective shocks, seeded schedule/spontaneous draws, v63/event-26/`v24` replay |
 | [Societal resilience](docs/societal-resilience.md) | Detached ten-panel shock-response series, programmatic `societal-resilience-report-v1`, no composite score |
+| [Collapse and recovery](docs/collapse-recovery.md) | Detached eight-axis trajectories, succession graph, programmatic `collapse-recovery-report-v1`, no CivilizationCollapsed flag |
 | [Economic cascades](docs/economic-cascades.md) | Five objective disruption classes, observable dependency edges, bounded `linked`/`unlinked`/`unresolved` chains, snapshot/store, seven GET routes, and Research UI panel |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
@@ -172,5 +173,6 @@ Optional V3 civilization overlays (regions, settlements, migration, completed-ex
 - [Commons governance](docs/commons-governance.md)
 - [Disasters](docs/disasters.md)
 - [Societal resilience](docs/societal-resilience.md)
+- [Collapse and recovery](docs/collapse-recovery.md)
 
 Current catalog: 275 metric families (the V4-27 landing reported 250 metric families); 17 V4 contexts / `v4-context-map-v6`; 12 owned / 0 unowned; disaster replay 26/`v24`, ecology 29/`v27`, `/v1`, `observer-protocol-v1`, Alembic `0017`.

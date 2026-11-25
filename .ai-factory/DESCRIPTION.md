@@ -1028,3 +1028,12 @@ V4-40 (societal resilience, 2026-11-25) lands detached analysis-only
 `run_with_resilience_capture`. No composite score, new authority, route,
 metric-catalog append, or SQL migration. Pins unchanged from V4-39. See
 `docs/societal-resilience.md`.
+
+V4-41 (collapse and recovery, 2026-11-25) lands detached analysis-only
+collapse/recovery composition: eight independent indicator axes, succession
+graph with continuity annotations, and programmatic
+`collapse-recovery-report-v1` via opt-in
+`run_with_collapse_recovery_capture`. No `CivilizationCollapsed` boolean,
+composite score, new authority, route, metric-catalog append, or SQL migration.
+Disasters are not required. Pins unchanged from V4-40. See
+`docs/collapse-recovery.md`.

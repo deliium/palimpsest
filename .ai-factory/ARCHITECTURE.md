@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-40
+### Current baseline through V4-41
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v63` for disasters (ecology family plus mandatory `disasters`); `runner-config-v62` remains commons governance; `runner-config-v61` remains overexploitation; `runner-config-v60` remains ecological resources; `runner-config-v59` remains medical beliefs; accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 45 / 73 |
-| Metric families | 275 (unchanged by V4-36–V4-40; programmatic commons/resilience reports only) |
+| Metric families | 275 (unchanged by V4-36–V4-41; programmatic commons/resilience/collapse reports only) |
 | Latest replay / codec pair | Disaster-active runs use reserved event 26 / codec `v24`; active ecology / overexploitation keep event 29 / codec `v27` / projector `v2`; disease-active runs use reserved event 24 / codec `v22`; measurement instruments still select `EVENT_SCHEMA_REPLAY_V28` / `v26`; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted |
 | Subjective pending codec | `finalization-command-v7` adds `commons-governance-state-v1` to the v6 medical/science/measurement state; `finalization-command-v6` remains medical beliefs; default is `finalization-command-v1`; this is not a world replay codec |
 | Alembic head | `0017` |
@@ -1554,3 +1554,15 @@ after ordinary execution; sealed inputs stay internal. Pins unchanged from
 V4-39: 275 metric families, 45/73, v63 latest opt-in, disaster 26/`v24`,
 `/v1`, `observer-protocol-v1`, Alembic `0017`. See
 `docs/societal-resilience.md`.
+
+### V4-41 collapse and recovery seam
+
+V4-41 delivers detached analysis-only collapse/recovery composition adjacent to
+`societal_resilience`: opt-in finalized capture without a disasters
+prerequisite, eight independent 32-tick indicator axes, frozen-baseline episode
+annotations, forward-only succession with continuity/branch-loss notes, and
+programmatic `collapse-recovery-report-v1`. No `CivilizationCollapsed`
+boolean, composite score, route, metric-catalog append, or SQL migration.
+Trusted `experiments.collapse_recovery_capture.run_with_collapse_recovery_capture`
+builds the report after ordinary execution; sealed inputs stay internal. Pins
+unchanged from V4-40. See `docs/collapse-recovery.md`.
