@@ -116,20 +116,31 @@ Authority: The original request defines the outcome and prohibitions. `.ai-facto
 
 ## Verification Receipt (2026-11-25)
 
-Focused:
+Focused (post-cleanup):
 
 ```text
 uv run --frozen --python 3.12.14 pytest tests/unit/test_resilience*.py \
   tests/architecture/test_resilience_boundaries.py \
   tests/unit/test_disaster_experiments.py \
   tests/unit/test_disaster_replay.py \
+  tests/unit/test_v1_regression_gate.py \
+  tests/unit/test_v2_scientific_invariants.py \
   tests/unit/test_alembic_head_pin.py -q
-→ 61 passed
+→ 75 passed
 ```
 
-Also: resilience-only suite 46 passed; `ruff check` on new resilience modules clean;
-`mypy` on resilience modules clean; `git diff --check` clean.
+Static: `ruff check` on resilience modules/tests clean; `mypy` on resilience
+modules clean; `lint-imports` 25 kept; `git diff --check` on changed source clean.
 
-Out of changed surface / unexecuted here: full-repo `pytest` with coverage,
-Compose, PostgreSQL disposable DB, Godot, browser, and long-horizon scale
-profiles.
+Full local (default markers, with coverage):
+
+```text
+uv run --frozen --python 3.12.14 pytest --cov --cov-report=term-missing:skip-covered -q
+→ initially 5 failed, 13398 passed, 5 skipped, 180 deselected in 0:54:39
+   TOTAL coverage 80%
+→ root cause: historical docs tests still asserted `through V4-39`
+→ after pin bump to `through V4-40`: those four docs modules → 22 passed
+```
+
+Still out of changed surface / unexecuted: Compose, PostgreSQL disposable DB,
+Godot, browser, and long-horizon scale profiles.
