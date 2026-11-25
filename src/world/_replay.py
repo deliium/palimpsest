@@ -60,6 +60,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V23,
     EVENT_SCHEMA_REPLAY_V24,
     EVENT_SCHEMA_REPLAY_V25,
+    EVENT_SCHEMA_REPLAY_V26,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
     EVENT_SCHEMA_REPLAY_V29,
@@ -81,6 +82,11 @@ from world.events import (
     CorpseCustodyOpened,
     CraftStarted,
     Died,
+    DisasterInfrastructureEffectRecord,
+    DisasterOutcome,
+    DisasterResolved,
+    DisasterStockEffectRecord,
+    DisasterSurgeEffectRecord,
     DiseaseStateChanged,
     Dropped,
     Drunk,
@@ -434,6 +440,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V23,
             EVENT_SCHEMA_REPLAY_V24,
             EVENT_SCHEMA_REPLAY_V25,
+            EVENT_SCHEMA_REPLAY_V26,
             EVENT_SCHEMA_REPLAY_V27,
             EVENT_SCHEMA_REPLAY_V28,
             EVENT_SCHEMA_REPLAY_V29,
@@ -520,10 +527,15 @@ def _project_tick_group(
         if event.tick != group.tick:
             raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
 
-    pressure_active = (
-        schema_version == EVENT_SCHEMA_REPLAY_V29
-        and state.ecological_resources is not None
-    )
+    pressure_active = False
+    if state.ecological_resources is not None:
+        if schema_version == EVENT_SCHEMA_REPLAY_V29:
+            pressure_active = True
+        elif schema_version == EVENT_SCHEMA_REPLAY_V26:
+            disaster_state = getattr(state, "disaster_state", None)
+            pressure_active = (
+                disaster_state is not None and disaster_state.overexploitation_active
+            )
     tick_start_tenths: dict[EntityId, int] = {}
     managed_order: tuple[EntityId, ...] = ()
     if pressure_active:
@@ -644,6 +656,15 @@ def _project_tick_group(
             and details.resource_id in working.ecological_resources
         ):
             raise ProjectionError(ProjectionErrorCode.INVALID_ORDERING)
+
+        if schema_version == EVENT_SCHEMA_REPLAY_V26:
+            if pressure_active and type(details) is EcologicalResourceChanged:
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            if (
+                not pressure_active
+                and type(details) is ResourcePressureRecorded
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
 
         next_state, changed = _apply_event_effect(
             working,
@@ -1008,6 +1029,10 @@ def _apply_event_effect(
                     ProjectionErrorCode.INVARIANT_FAILED
                 ) from exc
             return next_state, next_state is not state
+        case DisasterResolved() as disaster_receipt:
+            return _project_disaster_resolved(
+                state, event, disaster_receipt, schema_version=schema_version
+            )
         case CorpseCustodyOpened() as opened:
             return _project_corpse_custody_opened(state, opened), True
         case TakenFromCorpse() as taken:
@@ -1654,6 +1679,93 @@ def _project_artifact_partially_lost(
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
 
 
+def _project_disaster_resolved(
+    state: WorldState,
+    event: WorldEvent,
+    details: DisasterResolved,
+    *,
+    schema_version: int,
+) -> tuple[WorldState, bool]:
+    """Fold one disaster receipt without policy or RNG."""
+    from world._disasters import (
+        DisasterStockPulse,
+        apply_recorded_stock_disaster,
+        mark_disaster_rule_applied,
+    )
+    from world.disasters import DisasterKind
+    from world.effects import SystemCause, SystemEffectFamily
+    from world.events import (
+        EVENT_SCHEMA_REPLAY_V26,
+        DisasterInfrastructureTargetView,
+        DisasterLocationTargetView,
+        DisasterResourceTargetView,
+    )
+
+    if schema_version != EVENT_SCHEMA_REPLAY_V26:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+    if state.disaster_state is None:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+    cause = event.cause
+    if (
+        type(cause) is not SystemCause
+        or cause.effect_family is not SystemEffectFamily.DISASTER
+    ):
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+    if details.rule_id in state.disaster_state.applied_rule_ids:
+        if details.outcome is DisasterOutcome.APPLIED:
+            raise ProjectionError(ProjectionErrorCode.DUPLICATE_EVENT)
+    if details.outcome is not DisasterOutcome.APPLIED:
+        # Skip receipts are attribution-only; no ledger advance.
+        return state, False
+
+    next_state = state
+    if type(details.effect) is DisasterStockEffectRecord:
+        if type(details.target) is not DisasterResourceTargetView:
+            raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+        pulse = DisasterStockPulse(
+            rule_id=details.rule_id,
+            kind=details.disaster_kind,
+            origin=details.origin,
+            resource_id=details.target.resource_id,
+            quantity_before_tenths=details.effect.quantity_before_tenths,
+            quantity_after_tenths=details.effect.quantity_after_tenths,
+            damage_before_tenths=details.effect.damage_before_tenths,
+            damage_after_tenths=details.effect.damage_after_tenths,
+        )
+        try:
+            next_state, _witness = apply_recorded_stock_disaster(next_state, pulse)
+        except ValueError as exc:
+            raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+    elif type(details.effect) is DisasterInfrastructureEffectRecord:
+        # Mutation already applied by the preceding InfrastructureDestroyed.
+        if type(details.target) is not DisasterInfrastructureTargetView:
+            raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+        asset = (state.infrastructure or {}).get(details.effect.asset_id)
+        if asset is None:
+            raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    elif type(details.effect) is DisasterSurgeEffectRecord:
+        if type(details.target) is not DisasterLocationTargetView:
+            raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+        if details.disaster_kind is not DisasterKind.EPIDEMIC_SURGE:
+            raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+        # Surge does not rewrite disease rows from the receipt.
+    else:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+
+    try:
+        next_ledger = mark_disaster_rule_applied(
+            next_state.disaster_state or state.disaster_state, details.rule_id
+        )
+    except ValueError as exc:
+        raise ProjectionError(ProjectionErrorCode.DUPLICATE_EVENT) from exc
+    next_state = rebuild_world_state(
+        next_state,
+        disaster_state=next_ledger,
+        replace_disaster_state=True,
+    )
+    return next_state, True
+
+
 def _project_agent_created(
     state: WorldState,
     event: WorldEvent,
@@ -1734,6 +1846,7 @@ def _project_kinship_edge_recorded(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,

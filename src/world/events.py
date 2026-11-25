@@ -40,6 +40,12 @@ from world.artifacts import (
     require_artifact_kind,
 )
 from world.communications import StructuredUtterance, confidence_band
+from world.disasters import (
+    DISASTER_RULE_ID_PATTERN,
+    DisasterKind,
+    DisasterOrigin,
+    DisasterSkipReason,
+)
 from world.effects import (
     ActionCause,
     DeathCause,
@@ -59,6 +65,7 @@ from world.identifiers import (
     require_ordered_unique,
     require_stable_id,
 )
+from world.infrastructure import InfrastructureKind
 from world.measurement import (
     InstrumentState,
     MeasurementReading,
@@ -95,6 +102,7 @@ EVENT_SCHEMA_REPLAY_V22: Final[int] = 22
 EVENT_SCHEMA_REPLAY_V23: Final[int] = 23
 EVENT_SCHEMA_REPLAY_V24: Final[int] = 24
 EVENT_SCHEMA_REPLAY_V25: Final[int] = 25
+EVENT_SCHEMA_REPLAY_V26: Final[int] = 26
 EVENT_SCHEMA_REPLAY_V27: Final[int] = 27
 EVENT_SCHEMA_REPLAY_V28: Final[int] = 28
 EVENT_SCHEMA_REPLAY_V29: Final[int] = 29
@@ -125,6 +133,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
@@ -156,6 +165,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
@@ -187,6 +197,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -214,6 +225,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -240,6 +252,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -265,6 +278,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -289,6 +303,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -312,6 +327,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -334,6 +350,7 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -355,6 +372,7 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -2517,6 +2535,229 @@ class ResourcePressureRecorded:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+class DisasterOutcome(StrEnum):
+    """Closed receipt outcomes for ``DisasterResolved``."""
+
+    APPLIED = "applied"
+    NO_EFFECT = "no_effect"
+    WEATHER_INELIGIBLE = "weather_ineligible"
+    NO_LIVE_ASSET = "no_live_asset"
+    ASSET_AMBIGUOUS = "asset_ambiguous"
+
+
+@dataclass(frozen=True, slots=True)
+class DisasterResourceTargetView:
+    """Typed resource target on a disaster receipt."""
+
+    resource_id: EntityId
+
+    def __post_init__(self) -> None:
+        if type(self.resource_id) is not EntityId:
+            raise TypeError("DisasterResourceTargetView.resource_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
+class DisasterInfrastructureTargetView:
+    """Typed infrastructure target on a disaster receipt."""
+
+    location_id: EntityId
+    endpoint_location_id: EntityId | None
+    infrastructure_kind: InfrastructureKind
+
+    def __post_init__(self) -> None:
+        if type(self.location_id) is not EntityId:
+            raise TypeError(
+                "DisasterInfrastructureTargetView.location_id must be EntityId"
+            )
+        if self.endpoint_location_id is not None and type(
+            self.endpoint_location_id
+        ) is not EntityId:
+            raise TypeError(
+                "DisasterInfrastructureTargetView.endpoint_location_id must be "
+                "EntityId or None"
+            )
+        if type(self.infrastructure_kind) is not InfrastructureKind:
+            raise TypeError(
+                "DisasterInfrastructureTargetView.infrastructure_kind must be "
+                "InfrastructureKind"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class DisasterLocationTargetView:
+    """Typed location target on a disaster receipt."""
+
+    location_id: EntityId
+
+    def __post_init__(self) -> None:
+        if type(self.location_id) is not EntityId:
+            raise TypeError("DisasterLocationTargetView.location_id must be EntityId")
+
+
+DisasterResolvedTarget = (
+    DisasterResourceTargetView
+    | DisasterInfrastructureTargetView
+    | DisasterLocationTargetView
+)
+
+
+@dataclass(frozen=True, slots=True)
+class DisasterStockEffectRecord:
+    """Exact tenths before/after for an applied stock shock."""
+
+    quantity_before_tenths: int
+    quantity_after_tenths: int
+    damage_before_tenths: int
+    damage_after_tenths: int
+
+    def __post_init__(self) -> None:
+        for name in (
+            "quantity_before_tenths",
+            "quantity_after_tenths",
+            "damage_before_tenths",
+            "damage_after_tenths",
+        ):
+            value = getattr(self, name)
+            if type(value) is not int or isinstance(value, bool) or value < 0:
+                raise ValueError(f"disaster_stock_effect_{name}_invalid")
+        if self.quantity_after_tenths > self.quantity_before_tenths:
+            raise ValueError("disaster_stock_effect_quantity_increased")
+        if self.damage_after_tenths < self.damage_before_tenths:
+            raise ValueError("disaster_stock_effect_damage_decreased")
+        if (
+            self.quantity_after_tenths == self.quantity_before_tenths
+            and self.damage_after_tenths == self.damage_before_tenths
+        ):
+            raise ValueError("disaster_stock_effect_no_change")
+
+
+@dataclass(frozen=True, slots=True)
+class DisasterInfrastructureEffectRecord:
+    """Resolved asset id for an applied infrastructure shock."""
+
+    asset_id: EntityId
+
+    def __post_init__(self) -> None:
+        if type(self.asset_id) is not EntityId:
+            raise TypeError(
+                "DisasterInfrastructureEffectRecord.asset_id must be EntityId"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class DisasterSurgeEffectRecord:
+    """Positive additional latent count for an applied surge."""
+
+    additional_latent_count: int
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.additional_latent_count) is not int
+            or isinstance(self.additional_latent_count, bool)
+            or self.additional_latent_count < 1
+        ):
+            raise ValueError("disaster_surge_effect_count_invalid")
+
+
+DisasterResolvedEffect = (
+    DisasterStockEffectRecord
+    | DisasterInfrastructureEffectRecord
+    | DisasterSurgeEffectRecord
+    | None
+)
+
+_DISASTER_SKIP_OUTCOMES: Final[frozenset[DisasterOutcome]] = frozenset(
+    {
+        DisasterOutcome.NO_EFFECT,
+        DisasterOutcome.WEATHER_INELIGIBLE,
+        DisasterOutcome.NO_LIVE_ASSET,
+        DisasterOutcome.ASSET_AMBIGUOUS,
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class DisasterResolved:
+    """Private objective disaster receipt; attribution only, not a second clock."""
+
+    rule_id: str
+    disaster_kind: DisasterKind
+    origin: DisasterOrigin
+    target: DisasterResolvedTarget
+    outcome: DisasterOutcome
+    effect: DisasterResolvedEffect
+    kind: Literal["disaster_resolved"] = field(
+        default="disaster_resolved", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.rule_id) is not str or not DISASTER_RULE_ID_PATTERN.fullmatch(
+            self.rule_id
+        ):
+            raise ValueError("disaster_resolved_rule_id_invalid")
+        if type(self.disaster_kind) is not DisasterKind:
+            raise TypeError("DisasterResolved.disaster_kind must be DisasterKind")
+        if type(self.origin) is not DisasterOrigin:
+            raise TypeError("DisasterResolved.origin must be DisasterOrigin")
+        if type(self.target) not in {
+            DisasterResourceTargetView,
+            DisasterInfrastructureTargetView,
+            DisasterLocationTargetView,
+        }:
+            raise TypeError("DisasterResolved.target must be a typed target view")
+        if type(self.outcome) is not DisasterOutcome:
+            raise TypeError("DisasterResolved.outcome must be DisasterOutcome")
+        if self.outcome is DisasterOutcome.APPLIED:
+            if self.effect is None:
+                raise ValueError("disaster_resolved_applied_requires_effect")
+            if self.disaster_kind in {
+                DisasterKind.FLOOD_LIKE,
+                DisasterKind.FIRE,
+                DisasterKind.DROUGHT,
+                DisasterKind.RESOURCE_COLLAPSE,
+            }:
+                if type(self.effect) is not DisasterStockEffectRecord:
+                    raise ValueError("disaster_resolved_effect_kind_mismatch")
+                if type(self.target) is not DisasterResourceTargetView:
+                    raise ValueError("disaster_resolved_target_kind_mismatch")
+            elif self.disaster_kind is DisasterKind.INFRASTRUCTURE_DESTRUCTION:
+                if type(self.effect) is not DisasterInfrastructureEffectRecord:
+                    raise ValueError("disaster_resolved_effect_kind_mismatch")
+                if type(self.target) is not DisasterInfrastructureTargetView:
+                    raise ValueError("disaster_resolved_target_kind_mismatch")
+            elif self.disaster_kind is DisasterKind.EPIDEMIC_SURGE:
+                if type(self.effect) is not DisasterSurgeEffectRecord:
+                    raise ValueError("disaster_resolved_effect_kind_mismatch")
+                if type(self.target) is not DisasterLocationTargetView:
+                    raise ValueError("disaster_resolved_target_kind_mismatch")
+            else:
+                raise ValueError("disaster_resolved_kind_invalid")
+        else:
+            if self.outcome not in _DISASTER_SKIP_OUTCOMES:
+                raise ValueError("disaster_resolved_outcome_invalid")
+            if self.effect is not None:
+                raise ValueError("disaster_resolved_skip_requires_null_effect")
+            if self.origin is not DisasterOrigin.SCHEDULED:
+                raise ValueError("disaster_resolved_skip_requires_scheduled")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+def disaster_outcome_from_skip(reason: DisasterSkipReason) -> DisasterOutcome:
+    """Map a skip reason onto the closed receipt outcome enum."""
+    if type(reason) is not DisasterSkipReason:
+        raise TypeError("reason must be DisasterSkipReason")
+    mapping = {
+        DisasterSkipReason.NO_EFFECT: DisasterOutcome.NO_EFFECT,
+        DisasterSkipReason.WEATHER_INELIGIBLE: DisasterOutcome.WEATHER_INELIGIBLE,
+        DisasterSkipReason.NO_LIVE_ASSET: DisasterOutcome.NO_LIVE_ASSET,
+        DisasterSkipReason.ASSET_AMBIGUOUS: DisasterOutcome.ASSET_AMBIGUOUS,
+    }
+    try:
+        return mapping[reason]
+    except KeyError as exc:
+        raise ValueError("disaster_skip_reason_unsupported") from exc
+
+
 @dataclass(frozen=True, slots=True)
 class InstrumentCalibrated:
     """Effect-complete adjustment against a physical reference."""
@@ -3454,6 +3695,7 @@ EventDetails = (
     | DiseaseStateChanged
     | EcologicalResourceChanged
     | ResourcePressureRecorded
+    | DisasterResolved
     | CorpseCustodyOpened
     | TakenFromCorpse
     | PossessionClaimAsserted
@@ -3537,6 +3779,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         DiseaseStateChanged,
         EcologicalResourceChanged,
         ResourcePressureRecorded,
+        DisasterResolved,
         CorpseCustodyOpened,
         TakenFromCorpse,
         PossessionClaimAsserted,
@@ -3574,6 +3817,7 @@ _INFRASTRUCTURE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
@@ -3587,6 +3831,7 @@ _TRAVEL_NETWORK_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
@@ -3600,6 +3845,7 @@ _MEASUREMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3611,6 +3857,7 @@ _DISEASE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V29,
     }
 )
@@ -3618,13 +3865,17 @@ _ECOLOGY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {EcologicalResourceChanged}
 )
 _ECOLOGY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V25}
+    {EVENT_SCHEMA_REPLAY_V25, EVENT_SCHEMA_REPLAY_V26}
 )
 _OVEREXPLOITATION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {ResourcePressureRecorded}
 )
 _OVEREXPLOITATION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V29}
+    {EVENT_SCHEMA_REPLAY_V26, EVENT_SCHEMA_REPLAY_V29}
+)
+_DISASTER_DETAIL_TYPES: Final[frozenset[type]] = frozenset({DisasterResolved})
+_DISASTER_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V26}
 )
 
 
@@ -3655,6 +3906,7 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3673,6 +3925,7 @@ _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3690,6 +3943,7 @@ _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3709,6 +3963,7 @@ _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3725,6 +3980,7 @@ _EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3748,6 +4004,7 @@ _PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3764,6 +4021,7 @@ _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3779,6 +4037,7 @@ _JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3851,6 +4110,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
     }
@@ -3984,6 +4244,8 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
         return schema_version in _ECOLOGY_EVENT_SCHEMAS
     if type(details) in _OVEREXPLOITATION_DETAIL_TYPES:
         return schema_version in _OVEREXPLOITATION_EVENT_SCHEMAS
+    if type(details) in _DISASTER_DETAIL_TYPES:
+        return schema_version in _DISASTER_EVENT_SCHEMAS
     if type(details) in _INFRASTRUCTURE_DETAIL_TYPES:
         return schema_version in _INFRASTRUCTURE_EVENT_SCHEMAS
     if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
@@ -4285,6 +4547,14 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return resource_id
         case ResourcePressureRecorded(resource_id=resource_id):
             return resource_id
+        case DisasterResolved(target=target):
+            if type(target) is DisasterResourceTargetView:
+                return target.resource_id
+            if type(target) is DisasterInfrastructureTargetView:
+                return target.location_id
+            if type(target) is DisasterLocationTargetView:
+                return target.location_id
+            return None
         case (
             CorpseCustodyOpened(body_id=body_id)
             | PossessionClaimAsserted(decedent_id=body_id)
@@ -4523,6 +4793,15 @@ class WorldEvent:
                     self.schema_version,
                 )
                 raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _DISASTER_DETAIL_TYPES:
+            if self.schema_version not in _DISASTER_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=disasters_requires_v26",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         if type(self.details) in _INFRASTRUCTURE_DETAIL_TYPES:
             if self.schema_version not in _INFRASTRUCTURE_EVENT_SCHEMAS:
                 _LOG.error(
@@ -4569,7 +4848,12 @@ class WorldEvent:
                     EVENT_SCHEMA_REPLAY_V21,
                     EVENT_SCHEMA_REPLAY_V22,
                     EVENT_SCHEMA_REPLAY_V23,
-        EVENT_SCHEMA_REPLAY_V27,
+                    EVENT_SCHEMA_REPLAY_V24,
+                    EVENT_SCHEMA_REPLAY_V25,
+                    EVENT_SCHEMA_REPLAY_V26,
+                    EVENT_SCHEMA_REPLAY_V27,
+                    EVENT_SCHEMA_REPLAY_V28,
+                    EVENT_SCHEMA_REPLAY_V29,
                 }
             ):
                 _LOG.warning(
@@ -5164,6 +5448,14 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
                 affected_entity_ids=(resource_id,),
+                private_recipient_ids=(),
+            )
+        case DisasterResolved():
+            # Private attribution receipt: never enters agent or observer audiences.
+            return OccurrenceContext(
+                origin_location_id=None,
+                destination_location_id=None,
+                affected_entity_ids=(),
                 private_recipient_ids=(),
             )
         case (

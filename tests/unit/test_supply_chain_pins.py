@@ -62,7 +62,7 @@ def test_no_test_expects_markets_credit_unimplemented() -> None:
 
 
 def test_owned_flag_count_is_eight() -> None:
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
     assert "supply_chains" in V4_OWNED_CAPABILITY_FLAGS
     assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
     assert METRIC_FAMILY_COUNT == 275

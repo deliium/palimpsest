@@ -806,6 +806,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -840,6 +841,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -867,6 +869,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -893,6 +896,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -917,6 +921,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -940,6 +945,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -962,6 +968,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -991,6 +998,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -1012,6 +1020,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -1038,6 +1047,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -1066,6 +1076,7 @@ def _encode_world_snapshot(
             "v21",
             "v22",
             "v23",
+            "v24",
             "v25",
             "v26",
             "v27",
@@ -1074,14 +1085,27 @@ def _encode_world_snapshot(
                 assert value.journeys is not None
                 payload["regions_migration"] = value.regions_migration.canonical()
                 payload["journeys"] = [_encode_journey(item) for item in value.journeys]
-            assert value.infrastructure is not None
-            payload["infrastructure"] = [
-                _encode_infrastructure_asset(item) for item in value.infrastructure
-            ]
-            _LOGGER.debug(
-                "infrastructure_snapshot_encode asset_count=%s",
-                len(value.infrastructure),
-            )
+            if value.persistence_codec_version == "v24":
+                # Explicit active binding: omit when inactive, encode [] when empty.
+                if value.infrastructure is not None:
+                    payload["infrastructure"] = [
+                        _encode_infrastructure_asset(item)
+                        for item in value.infrastructure
+                    ]
+                    _LOGGER.debug(
+                        "infrastructure_snapshot_encode asset_count=%s",
+                        len(value.infrastructure),
+                    )
+            else:
+                assert value.infrastructure is not None
+                payload["infrastructure"] = [
+                    _encode_infrastructure_asset(item)
+                    for item in value.infrastructure
+                ]
+                _LOGGER.debug(
+                    "infrastructure_snapshot_encode asset_count=%s",
+                    len(value.infrastructure),
+                )
             if value.persistence_codec_version in {"v25", "v26"}:
                 assert value.travel_network is not None
                 payload["travel_network"] = [
@@ -1149,7 +1173,7 @@ def _encode_world_snapshot(
                     )
                 elif value.persistence_codec_version == "v22":
                     raise AssertionError("v22 requires disease_mechanics")
-            if value.persistence_codec_version in {"v23", "v27"}:
+            if value.persistence_codec_version in {"v23", "v24", "v27"}:
                 from simulation.ecological_resources_checkpoint import (
                     encode_ecological_resources_checkpoint_section,
                 )
@@ -1167,6 +1191,21 @@ def _encode_world_snapshot(
                 _LOGGER.debug(
                     "ecology_snapshot_encode managed_count=%s",
                     len(value.ecological_resources.rows),
+                )
+            if value.persistence_codec_version == "v24":
+                from simulation.disasters_checkpoint import (
+                    encode_disaster_state_section,
+                )
+
+                assert value.disaster_state is not None
+                payload.update(encode_disaster_state_section(value.disaster_state))
+                _LOGGER.debug(
+                    "disaster_snapshot_encode applied_count=%s",
+                    len(value.disaster_state.applied_rule_ids),
+                )
+            elif getattr(value, "disaster_state", None) is not None:
+                raise PersistenceSerializationError(
+                    "invalid_fields", "$.disaster_state"
                 )
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
@@ -1305,7 +1344,8 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     wire_codec = data.get("persistence_codec_version")
     codec = (
         "v18"
-        if wire_codec in {"v19", "v20", "v21", "v22", "v23", "v25", "v26", "v27"}
+        if wire_codec
+        in {"v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27"}
         else wire_codec
     )
     keys = {
@@ -1472,6 +1512,22 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             keys |= {"regions_migration", "journeys"}
         if "instrument_states" in data or "measurement_references" in data:
             keys |= {"instrument_states", "measurement_references"}
+    elif wire_codec == "v24":
+        keys |= {
+            "ecological_resources",
+            "environmental_dynamics",
+            "disaster_state",
+        }
+        if "disease_mechanics" in data:
+            keys.add("disease_mechanics")
+        if "infrastructure" in data:
+            keys.add("infrastructure")
+        if "travel_network" in data:
+            keys.add("travel_network")
+        if "regions_migration" in data or "journeys" in data:
+            keys |= {"regions_migration", "journeys"}
+        if "instrument_states" in data or "measurement_references" in data:
+            keys |= {"instrument_states", "measurement_references"}
     elif wire_codec == "v23":
         keys |= {"ecological_resources", "environmental_dynamics"}
         if "disease_mechanics" in data:
@@ -1508,7 +1564,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     infrastructure = None
     travel_network = None
     if wire_codec in {"v19", "v20"} or (
-        wire_codec in {"v21", "v22", "v23", "v25", "v26", "v27"}
+        wire_codec in {"v21", "v22", "v23", "v24", "v25", "v26", "v27"}
         and "regions_migration" in data
     ):
         from simulation.runner_serialization import (
@@ -1531,7 +1587,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             data["journeys"], _decode_journey, path=f"{path}.journeys"
         )
     if wire_codec in {"v21", "v25", "v26", "v27"} or (
-        wire_codec in {"v22", "v23"} and "infrastructure" in data
+        wire_codec in {"v22", "v23", "v24"} and "infrastructure" in data
     ):
         infrastructure = _decode_object_list(
             data["infrastructure"],
@@ -1539,7 +1595,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             path=f"{path}.infrastructure",
         )
     if wire_codec in {"v25", "v26"} or (
-        wire_codec in {"v22", "v23", "v27"} and "travel_network" in data
+        wire_codec in {"v22", "v23", "v24", "v27"} and "travel_network" in data
     ):
         travel_network = _decode_object_list(
             data["travel_network"],
@@ -1552,7 +1608,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     ecological_resources = None
     environmental_dynamics = None
     if wire_codec == "v22" or (
-        wire_codec in {"v23", "v27"} and "disease_mechanics" in data
+        wire_codec in {"v23", "v24", "v27"} and "disease_mechanics" in data
     ):
         from simulation.disease_checkpoint import decode_disease_checkpoint_section
 
@@ -1562,7 +1618,8 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             if isinstance(disease_raw, dict) and "rows" in disease_raw
             else disease_raw
         )
-    if wire_codec in {"v23", "v27"}:
+    disaster_state = None
+    if wire_codec in {"v23", "v24", "v27"}:
         from simulation.ecological_resources_checkpoint import (
             decode_ecological_resources_checkpoint_section,
         )
@@ -1580,8 +1637,14 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             )
         except RunnerSerializationError as exc:
             raise PersistenceSerializationError(exc.code, exc.path) from exc
+    if wire_codec == "v24":
+        from simulation.disasters_checkpoint import decode_disaster_state_section
+
+        disaster_state = decode_disaster_state_section(data["disaster_state"])
+    elif "disaster_state" in data:
+        raise PersistenceSerializationError("invalid_fields", f"{path}.disaster_state")
     if wire_codec == "v26" or (
-        wire_codec in {"v22", "v23", "v27"} and "instrument_states" in data
+        wire_codec in {"v22", "v23", "v24", "v27"} and "instrument_states" in data
     ):
         from simulation.measurement_serialization import (
             MeasurementSerializationError,
@@ -1868,6 +1931,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             disease_mechanics=disease_mechanics,
             ecological_resources=ecological_resources,
             environmental_dynamics=environmental_dynamics,
+            disaster_state=disaster_state,
         )
     except PersistenceSerializationError:
         raise

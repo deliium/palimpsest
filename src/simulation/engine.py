@@ -369,6 +369,7 @@ def _bind_collective_projects_channel(engine: WorldEngine, config: object) -> No
     idle = 4 if spec is None else spec.idle_ticks
     engine._collective_projects_active = active
     engine._collective_projects_idle_ticks = idle
+    engine._force_collective_project_success = False
     if active:
         _LOGGER.debug(
             "collective_projects_channel active=%s idle_ticks=%s",
@@ -783,6 +784,7 @@ class WorldEngine:
         "_cultural_contact_active",
         "_dependency_care_spec",
         "_dependency_need_registers",
+        "_disasters",
         "_disease_mechanics",
         "_durable_records_spec",
         "_ecological_parameters",
@@ -790,6 +792,7 @@ class WorldEngine:
         "_engine_id",
         "_environmental_dynamics",
         "_experiment_catalog",
+        "_force_collective_project_success",
         "_infrastructure_networks_active",
         "_kinship_graph",
         "_kinship_spec",
@@ -868,6 +871,7 @@ class WorldEngine:
         disease_mechanics: object | None = None,
         ecological_resources: object | None = None,
         overexploitation_active: bool = False,
+        disasters: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -878,6 +882,7 @@ class WorldEngine:
         self._measurement_active = bool(bootstrap.instrument_states)
         if type(overexploitation_active) is not bool:
             raise TypeError("overexploitation_active must be bool")
+        from simulation.disasters_config import DisastersSpec
         from simulation.disease_config import DiseaseMechanicsSpec
         from simulation.ecological_resources_config import EcologicalResourcesSpec
         from world._ecological_resources import validate_ecological_resources_state
@@ -959,6 +964,31 @@ class WorldEngine:
                 len(self._ecological_resources.nodes)
                 if self._ecological_resources is not None
                 else 0,
+            )
+        if disasters is not None and type(disasters) is not DisastersSpec:
+            raise TypeError("disasters must be DisastersSpec or None")
+        disasters_on = bootstrap.disaster_state is not None
+        if disasters is None and disasters_on:
+            raise ValueError("disaster_channel_requires_policy")
+        if disasters is not None and not disasters_on:
+            raise ValueError("disaster_policy_requires_channel")
+        if disasters is not None:
+            from simulation.disasters_config import policy_sha256_for_disasters
+
+            digest = policy_sha256_for_disasters(disasters)
+            if digest != bootstrap.disaster_state.policy_sha256:  # type: ignore[union-attr]
+                raise ValueError("disaster_policy_mismatch")
+            if (
+                bootstrap.disaster_state.overexploitation_active  # type: ignore[union-attr]
+                != overexploitation_active
+            ):
+                raise ValueError("disaster_policy_mismatch")
+        self._disasters = disasters
+        if self._disasters is not None:
+            _LOGGER.debug(
+                "disasters_bound rule_count=%s schedule_count=%s",
+                len(self._disasters.rules),
+                len(self._disasters.schedule),
             )
         self._run_id = run_id if run_id is not None else derive_run_id(config)
         if type(self._run_id) is not RunId:
@@ -1062,6 +1092,7 @@ class WorldEngine:
             raise ValueError("collective_projects_idle_ticks must be in [1, 64]")
         self._collective_projects_active = collective_projects_active
         self._collective_projects_idle_ticks = collective_projects_idle_ticks
+        self._force_collective_project_success = False
         if type(cultural_contact_active) is not bool:
             raise TypeError("cultural_contact_active must be bool")
         self._cultural_contact_active = cultural_contact_active
@@ -1411,6 +1442,7 @@ class WorldEngine:
         kinship_spec: object | None = None,
         disease_mechanics: object | None = None,
         ecological_resources: object | None = None,
+        disasters: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -1577,6 +1609,7 @@ class WorldEngine:
             disease_require_living=False,
             ecological_resources=bootstrap.ecological_resources,
             ecological_policy_digest=bootstrap.ecological_policy_digest,
+            disaster_state=bootstrap.disaster_state,
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -1656,17 +1689,60 @@ class WorldEngine:
                     for node in ecological_resources.nodes
                 }
             )
+        from simulation.disasters_checkpoint import DisasterStateSection
+        from simulation.disasters_config import (
+            DisastersSpec,
+            policy_sha256_for_disasters,
+        )
         from simulation.versioning import (
+            DISASTERS_WRITE_PAIR_CODEC,
+            DISASTERS_WRITE_PAIR_EVENT,
             OVEREXPLOITATION_WRITE_PAIR_CODEC,
             OVEREXPLOITATION_WRITE_PAIR_EVENT,
         )
 
-        # Infer overexploitation mode from the verified checkpoint pair only.
+        disaster_section = getattr(snapshot, "disaster_state", None)
+        if disaster_section is not None and type(disaster_section) is not (
+            DisasterStateSection
+        ):
+            raise TypeError("snapshot.disaster_state must be DisasterStateSection")
+        if disasters is not None and type(disasters) is not DisastersSpec:
+            raise TypeError("disasters must be DisastersSpec or None")
+        if disasters is not None:
+            if disaster_section is None:
+                raise ValueError("disaster_policy_without_channel")
+            digest = policy_sha256_for_disasters(disasters)
+            if digest != disaster_section.policy_sha256:
+                _LOGGER.error(
+                    "disaster_policy_mismatch reason_code=disaster_policy_mismatch"
+                )
+                raise ValueError("disaster_policy_mismatch")
+            if disaster_section.overexploitation_active != (
+                snapshot.event_schema_version == OVEREXPLOITATION_WRITE_PAIR_EVENT
+                or disaster_section.overexploitation_active
+            ):
+                # Pressure binding is taken from the checkpoint ledger itself.
+                pass
+            # Applied IDs must be a subset of known rule ids.
+            known = {rule.rule_id for rule in disasters.rules}
+            if not set(disaster_section.applied_rule_ids) <= known:
+                raise ValueError("disaster_policy_mismatch")
+
+        # Infer overexploitation mode from the verified checkpoint pair only,
+        # or from the disaster ledger pressure flag on the disasters pair.
         engine._overexploitation_active = (
             snapshot.event_schema_version == OVEREXPLOITATION_WRITE_PAIR_EVENT
             and snapshot.persistence_codec_version
             == OVEREXPLOITATION_WRITE_PAIR_CODEC
         )
+        if (
+            snapshot.event_schema_version == DISASTERS_WRITE_PAIR_EVENT
+            and snapshot.persistence_codec_version == DISASTERS_WRITE_PAIR_CODEC
+            and disaster_section is not None
+        ):
+            engine._overexploitation_active = (
+                disaster_section.overexploitation_active
+            )
         if engine._overexploitation_active and ecology_section is None:
             raise ValueError("overexploitation_requires_ecological_channel")
         if ecology_section is not None:
@@ -1674,6 +1750,13 @@ class WorldEngine:
                 "ecological_channel_restored managed_count=%s policy_bound=%s",
                 len(ecology_section.rows),
                 ecological_resources is not None,
+            )
+        engine._disasters = disasters
+        if disaster_section is not None:
+            _LOGGER.debug(
+                "disaster_channel_restored applied_count=%s policy_bound=%s",
+                len(disaster_section.applied_rule_ids),
+                disasters is not None,
             )
         engine._run_id = snapshot.run_id
         engine._translator = registration_translator(bootstrap)
@@ -2275,6 +2358,7 @@ class WorldEngine:
         kinship_spec: object | None = None,
         disease_mechanics: object | None = None,
         ecological_resources: object | None = None,
+        disasters: object | None = None,
     ) -> WorldEngine:
         """Restore an engine by consuming bounded, pre-verified replay batches.
 
@@ -2309,6 +2393,7 @@ class WorldEngine:
             kinship_spec=kinship_spec,
             disease_mechanics=disease_mechanics,
             ecological_resources=ecological_resources,
+            disasters=disasters,
         )
         builder = _BatchRestoreBuilder(
             engine,
@@ -2551,6 +2636,7 @@ class WorldEngine:
                 disease_active=self._disease_mechanics is not None,
                 ecological_feedback_active=self._ecological_resources is not None,
                 overexploitation_active=self._overexploitation_active,
+                disasters_active=self._disasters is not None,
             )
             snap = self._snapshot
             sequence = snap.event_history.count_with_tick(tick)
@@ -2801,6 +2887,7 @@ class WorldEngine:
         disease_active=self._disease_mechanics is not None,
         ecological_feedback_active=self._ecological_resources is not None,
         overexploitation_active=self._overexploitation_active,
+        disasters_active=self._disasters is not None,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -4283,6 +4370,11 @@ class WorldEngine:
                 snap.tick.value,
             )
             raise RuntimeError("resolve_tick requires an open observation token")
+        if (
+            snap.world.state.disaster_state is not None
+            and self._disasters is None
+        ):
+            raise RuntimeError("resolve_tick requires disaster policy")
         if isinstance(submissions, (set, frozenset)) or not isinstance(
             submissions, Sequence
         ):
@@ -4791,7 +4883,88 @@ class WorldEngine:
                     "duplicate_shortage_window reason_code=duplicate_shortage_window"
                 )
             raise
-        routes_state = physical.working_state
+        post_physical_state = physical.working_state
+        disaster_stock_infra_pending: list[PendingEvent] = []
+        disaster_surge_by_location: Mapping[EntityId, object] = {}
+        disaster_family_ordinal = 0
+        if self._disasters is not None:
+            from simulation.disasters_randomness import select_disaster_candidates
+            from simulation.disasters_resolve import (
+                apply_disaster_candidates,
+                target_entity_id,
+            )
+            from world.events import (
+                DisasterResolved,
+                InfrastructureDestroyed,
+                ResourceNodeDepleted,
+                require_event_details,
+            )
+
+            assert post_physical_state.disaster_state is not None
+            candidates = select_disaster_candidates(
+                self._disasters,
+                run_config=self._config,
+                tick=snap.tick.value,
+                applied_rule_ids=post_physical_state.disaster_state.applied_rule_ids,
+            )
+            applied = apply_disaster_candidates(
+                working_state=post_physical_state,
+                disaster_state=post_physical_state.disaster_state,
+                candidates=candidates,
+                tick=snap.tick.value,
+            )
+            post_physical_state = applied.working_state
+            disaster_surge_by_location = applied.surge_by_location
+            for detail in applied.stock_infra_details:
+                typed = require_event_details(detail)
+                if type(typed) is InfrastructureDestroyed:
+                    entity_id = typed.asset_id
+                    family = SystemEffectFamily.DISASTER
+                elif type(typed) is ResourceNodeDepleted:
+                    entity_id = typed.resource_id
+                    family = SystemEffectFamily.RESOURCE_NODE
+                elif type(typed) is DisasterResolved:
+                    entity_id = target_entity_id(
+                        next(
+                            candidate
+                            for candidate in candidates
+                            if candidate.rule.rule_id == typed.rule_id
+                        )
+                    )
+                    family = SystemEffectFamily.DISASTER
+                else:
+                    raise TypeError("unexpected disaster detail")
+                cause_id = derive_system_cause_id(
+                    self._config,
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=snap.tick.value,
+                    effect_family=family.value,
+                    entity_id=entity_id,
+                    family_ordinal=disaster_family_ordinal,
+                )
+                disaster_stock_infra_pending.append(
+                    PendingEvent(
+                        cause=SystemCause(
+                            cause_id=cause_id,
+                            effect_family=family,
+                            entity_id=entity_id,
+                            family_ordinal=disaster_family_ordinal,
+                        ),
+                        details=typed,
+                        occurrence=build_occurrence_context(
+                            typed,
+                            origin_location_id=getattr(
+                                typed, "location_id", None
+                            ),
+                        ),
+                    )
+                )
+                disaster_family_ordinal += 1
+            semantic_mutation_disasters = applied.semantic_mutation
+        else:
+            semantic_mutation_disasters = False
+        routes_state = post_physical_state
         route_transitions: tuple[RouteConditionChanged, ...] = ()
         if self._travel_network_active:
             from world._travel_network import advance_route_conditions
@@ -4802,7 +4975,7 @@ class WorldEngine:
                 else self._environmental_dynamics.season_at(snap.tick.value)
             )
             routes_state, route_transitions = advance_route_conditions(
-                physical.working_state,
+                post_physical_state,
                 season=route_season,
                 tick=snap.tick.value,
             )
@@ -4976,22 +5149,35 @@ class WorldEngine:
             or physical.semantic_mutation
             or completion_state is not action_pending.working_state
             or bool(route_transitions)
+            or semantic_mutation_disasters
         )
         disease_death_pending: list[PendingEvent] = []
         disease_net_pending: list[PendingEvent] = []
         disease_start_rows: Mapping[EntityId, DiseaseConditionRow] | None = None
         disease_mortality_ids: tuple[EntityId, ...] = ()
+        disease_extra_latent: tuple[EntityId, ...] = ()
         if self._disease_mechanics is not None:
+            extra_opportunity = None
+            if disaster_surge_by_location:
+                from simulation.disasters_resolve import build_surge_opportunity
+
+                extra_opportunity = build_surge_opportunity(
+                    run_config=self._config,
+                    tick=snap.tick.value,
+                    surge_by_location=disaster_surge_by_location,  # type: ignore[arg-type]
+                )
             (
                 working_state,
                 disease_death_pending,
                 disease_start_rows,
                 disease_mortality_ids,
                 disease_mutation,
+                disease_extra_latent,
             ) = self._apply_disease_pass(
                 snap=snap,
                 start_state=snap.world.state,
                 working_state=working_state,
+                extra_opportunity=extra_opportunity,
             )
             semantic_mutation = semantic_mutation or disease_mutation
             _LOGGER.debug(
@@ -5090,6 +5276,59 @@ class WorldEngine:
                     )
                 )
                 disease_effect_ordinal += 1
+        disaster_surge_pending: list[PendingEvent] = []
+        if disaster_surge_by_location:
+            from simulation.disasters_resolve import (
+                finalize_surge_receipts,
+                target_entity_id,
+            )
+            from world.events import DisasterLocationTargetView, DisasterResolved
+
+            assert working_state.disaster_state is not None
+            (
+                working_state,
+                _next_ledger,
+                surge_receipts,
+                surge_mutation,
+            ) = finalize_surge_receipts(
+                working_state=working_state,
+                disaster_state=working_state.disaster_state,
+                surge_by_location=disaster_surge_by_location,  # type: ignore[arg-type]
+                extra_latent_recipients=disease_extra_latent,
+                start_disease=disease_start_rows,
+                end_disease=working_state.disease_state,
+            )
+            semantic_mutation = semantic_mutation or surge_mutation
+            for receipt in surge_receipts:
+                assert type(receipt) is DisasterResolved
+                target = receipt.target
+                if type(target) is not DisasterLocationTargetView:
+                    raise TypeError("surge receipt target must be location")
+                entity_id = target.location_id
+                cause_id = derive_system_cause_id(
+                    self._config,
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=snap.tick.value,
+                    effect_family=SystemEffectFamily.DISASTER.value,
+                    entity_id=entity_id,
+                    family_ordinal=disaster_family_ordinal,
+                )
+                disaster_surge_pending.append(
+                    PendingEvent(
+                        cause=SystemCause(
+                            cause_id=cause_id,
+                            effect_family=SystemEffectFamily.DISASTER,
+                            entity_id=entity_id,
+                            family_ordinal=disaster_family_ordinal,
+                        ),
+                        details=receipt,
+                        occurrence=build_occurrence_context(
+                            receipt, origin_location_id=None
+                        ),
+                    )
+                )
+                disaster_family_ordinal += 1
         working_state.validate_finalized_boundary(snap.tick.value)
 
         repository_pending: list[PendingEvent] = []
@@ -5103,16 +5342,20 @@ class WorldEngine:
 
         # Disease deaths sit with ordinary system/lifecycle events; private net
         # transitions trail so hidden-only changes do not shift visible sequences.
+        # Stock/infra disaster receipts sit with ordinary system effects; surge
+        # receipts trail private disease nets.
         opened = (
             action_pending.pending_events
             + tuple(journey_pending)
             + tuple(production_pending)
             + tuple(system_pending)
+            + tuple(disaster_stock_infra_pending)
             + tuple(disease_death_pending)
             + tuple(lifecycle_pending)
             + tuple(journey_cleanup_pending)
             + tuple(repository_pending)
             + tuple(disease_net_pending)
+            + tuple(disaster_surge_pending)
         )
         working_state = _fold_opened_custody(working_state, opened)
         merged = PendingBatch(
@@ -5206,6 +5449,7 @@ class WorldEngine:
         disease_active=self._disease_mechanics is not None,
         ecological_feedback_active=self._ecological_resources is not None,
         overexploitation_active=self._overexploitation_active,
+        disasters_active=self._disasters is not None,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -6943,6 +7187,16 @@ class WorldEngine:
             idle_ticks=self._collective_projects_idle_ticks,
         )
 
+    def force_collective_contribute_success(self, enabled: bool = True) -> None:
+        """Research/fixture hook: skip Bernoulli draws for collective contributes."""
+        if type(enabled) is not bool:
+            raise TypeError("enabled must be bool")
+        self._force_collective_project_success = enabled
+        _LOGGER.info(
+            "collective_project_force_success enabled=%s",
+            enabled,
+        )
+
     def _collective_project_success(
         self,
         *,
@@ -6963,6 +7217,8 @@ class WorldEngine:
         if type(working_state) is not WorldState:
             raise TypeError("working_state must be WorldState")
         if type(request.command) is not ContributeCollectiveProject:
+            return True
+        if self._force_collective_project_success:
             return True
         project = working_state.collective_projects.get(request.command.project_id)
         probability = COLLECTIVE_PROJECT_BASE_PROBABILITY
@@ -7033,14 +7289,18 @@ class WorldEngine:
         snap: _EngineSnapshot,
         start_state: WorldState,
         working_state: WorldState,
+        extra_opportunity: object | None = None,
     ) -> tuple[
         WorldState,
         list[PendingEvent],
         Mapping[EntityId, DiseaseConditionRow] | None,
         tuple[EntityId, ...],
         bool,
+        tuple[EntityId, ...],
     ]:
         """Run the private disease lifecycle and emit ordinary disease deaths."""
+        from collections.abc import Callable
+
         from simulation.disease_config import DISEASE_POLICY_ID, DiseaseMechanicsSpec
         from simulation.randomness import StreamScope, create_rng, derive_stream_seed
         from world._disease import advance_disease_pass
@@ -7052,6 +7312,8 @@ class WorldEngine:
         spec = self._disease_mechanics
         if type(spec) is not DiseaseMechanicsSpec:
             raise TypeError("disease_mechanics must be DiseaseMechanicsSpec")
+        if extra_opportunity is not None and not callable(extra_opportunity):
+            raise TypeError("extra_opportunity must be callable or None")
         tick = snap.tick.value
         thresholds = {
             "exposure": spec.exposure_chance_milli,
@@ -7081,6 +7343,9 @@ class WorldEngine:
             active_ticks=spec.active_ticks,
             immunity_after_recovery=spec.immunity_after_recovery,
             draw=draw,
+            extra_opportunity=cast(
+                Callable[[EntityId, EntityId], bool] | None, extra_opportunity
+            ),
         )
         next_state = rebuild_world_state(
             working_state,
@@ -7165,6 +7430,7 @@ class WorldEngine:
             result.start_rows,
             result.mortality_body_ids,
             mutated,
+            result.extra_latent_recipients,
         )
 
     def _measurement_rule_context(
@@ -7476,6 +7742,7 @@ def select_checkpoint_schema(
     disease_active: bool = False,
     ecological_feedback_active: bool = False,
     overexploitation_active: bool = False,
+    disasters_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -7529,8 +7796,29 @@ def select_checkpoint_schema(
         disease_active=disease_active,
         ecological_feedback_active=ecological_feedback_active,
         overexploitation_active=overexploitation_active,
+        disasters_active=disasters_active,
     )
 
+    if disasters_active:
+        from simulation.versioning import (
+            DISASTERS_WRITE_PAIR_CODEC,
+            DISASTERS_WRITE_PAIR_EVENT,
+        )
+
+        if (
+            schema_version != DISASTERS_WRITE_PAIR_EVENT
+            or codec != DISASTERS_WRITE_PAIR_CODEC
+        ):
+            _LOGGER.warning(
+                "checkpoint_schema_disagrees schema_version=%s codec=%s "
+                "expected_schema=%s expected_codec=%s "
+                "reason=disasters_active",
+                schema_version,
+                codec,
+                DISASTERS_WRITE_PAIR_EVENT,
+                DISASTERS_WRITE_PAIR_CODEC,
+            )
+        return schema_version, codec
     if overexploitation_active:
         from simulation.versioning import (
             OVEREXPLOITATION_WRITE_PAIR_CODEC,

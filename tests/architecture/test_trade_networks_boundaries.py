@@ -100,6 +100,7 @@ def test_v4_contexts_and_flags_are_unchanged() -> None:
             "science",
             "epidemics",
         "ecological_feedback",
+        "disasters",
         }
     )
 
@@ -119,7 +120,7 @@ def test_no_v57_or_new_flag_reference() -> None:
     offenders = [
         path
         for path in SRC.rglob("*.py")
-        if "runner-config-v63" in path.read_text(encoding="utf-8")
+        if "runner-config-v64" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
     assert len(V4_CAPABILITY_FLAGS) == 12

@@ -17,8 +17,6 @@ from simulation.ecological_resources_config import (
 )
 from simulation.models import RunId
 from simulation.runner import (
-    RunnerConstructionError,
-    RunnerConstructionErrorCode,
     SimulationRunner,
 )
 from simulation.runner_models import (
@@ -197,41 +195,11 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
         replace(_base(), v4_capability_flags=V4CapabilityFlags(science=True))
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "flag_name",
-    tuple(
-        name
-        for name in V4_FLAG_NAMES
-        if name
-        not in {
-            "organizations",
-            "formal_rules",
-            "legal_disputes",
-            "diplomacy",
-            "organized_conflict",
-            "infrastructure_networks",
-            "supply_chains",
-            "markets_credit",
-            "science",
-            "epidemics",
-            "ecological_feedback",
-        }
-    ),
-)
-async def test_each_unowned_enabled_flag_fails_closed_at_construction(
-    flag_name: str,
-) -> None:
-    config = replace(
-        _v56_config(),
-        v4_capability_flags=V4CapabilityFlags(**{flag_name: True}),
-    )
-    with pytest.raises(RunnerConstructionError) as excinfo:
-        await SimulationRunner.from_config(
-            config, run_id=RunId(f"run-v4-profile-{flag_name}")
-        )
-    assert excinfo.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
-    assert excinfo.value.stage == "v4_capability_flags"
+def test_all_v4_capability_flags_are_owned() -> None:
+    from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
+
+    assert frozenset(V4_FLAG_NAMES) == V4_OWNED_CAPABILITY_FLAGS
+    assert "disasters" in V4_OWNED_CAPABILITY_FLAGS
 
 
 @pytest.mark.asyncio

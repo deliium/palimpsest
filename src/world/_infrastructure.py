@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
+from world.disasters import DisasterSkipReason
 from world.identifiers import EntityId
 from world.infrastructure import (
     MAX_INFRASTRUCTURE_ASSETS,
@@ -17,6 +18,7 @@ from world.infrastructure import (
     catalog_row,
     effects_active,
     mint_infrastructure_id,
+    normalize_edge_endpoints,
 )
 from world.production import Structure, StructureKind
 
@@ -40,6 +42,7 @@ _COLLECTIVE_TO_INFRA: Final[dict[str, InfrastructureKind]] = {
 __all__ = [
     "adjust_linked_infrastructure",
     "decay_infrastructure",
+    "destroy_infrastructure_for_disaster",
     "edge_road_quality",
     "effective_body_capacity",
     "effective_exposure_scale",
@@ -618,6 +621,9 @@ def sync_infrastructure_with_structures(state: WorldState) -> WorldState:
     for asset_id, asset in current.items():
         if asset.linked_structure_id is None:
             continue
+        if asset.status is InfrastructureStatus.DESTROYED:
+            # Tombstones stay destroyed; structure integrity must not resurrect.
+            continue
         structure = state.structures.get(asset.linked_structure_id)
         if structure is None:
             continue
@@ -631,6 +637,106 @@ def sync_infrastructure_with_structures(state: WorldState) -> WorldState:
     if not changed:
         return state
     return rebuild_world_state(state, infrastructure=merged)
+
+
+def destroy_infrastructure_for_disaster(
+    state: WorldState,
+    *,
+    location_id: EntityId,
+    endpoint_location_id: EntityId | None,
+    infrastructure_kind: InfrastructureKind,
+    tick: int,
+) -> tuple[WorldState, InfrastructureAsset | DisasterSkipReason, object | None]:
+    """Destroy exactly one live matching asset for a configured infrastructure shock.
+
+    Returns ``(state, asset, InfrastructureDestroyed detail)`` on success, or
+    ``(state, DisasterSkipReason, None)`` with no mutation. Linked structures
+    and projects are left untouched.
+    """
+    from dataclasses import replace as dc_replace
+
+    from world._state import WorldState, rebuild_world_state
+
+    if type(state) is not WorldState:
+        raise TypeError("destroy_infrastructure_for_disaster requires WorldState")
+    if type(location_id) is not EntityId:
+        raise TypeError("location_id must be EntityId")
+    if endpoint_location_id is not None and type(endpoint_location_id) is not EntityId:
+        raise TypeError("endpoint_location_id must be EntityId or None")
+    if type(infrastructure_kind) is not InfrastructureKind:
+        raise TypeError("infrastructure_kind must be InfrastructureKind")
+    if type(tick) is not int or isinstance(tick, bool) or tick < 0:
+        raise ValueError("tick must be a nonnegative int")
+    current = state.infrastructure
+    if current is None:
+        raise _fail("infrastructure_channel_off")
+    row = catalog_row(infrastructure_kind)
+    matches: list[InfrastructureAsset] = []
+    if row.topology is InfrastructureTopology.NODE:
+        if endpoint_location_id is not None:
+            raise _fail("infrastructure_topology_mismatch")
+        for asset in sorted(current.values(), key=lambda item: item.asset_id.value):
+            if asset.kind is not infrastructure_kind:
+                continue
+            if asset.topology is not InfrastructureTopology.NODE:
+                continue
+            if asset.location_id != location_id:
+                continue
+            if asset.status is InfrastructureStatus.DESTROYED:
+                continue
+            matches.append(asset)
+    else:
+        if endpoint_location_id is None:
+            raise _fail("infrastructure_topology_mismatch")
+        left, right = normalize_edge_endpoints(location_id, endpoint_location_id)
+        for asset in sorted(current.values(), key=lambda item: item.asset_id.value):
+            if asset.kind is not infrastructure_kind:
+                continue
+            if asset.topology is not InfrastructureTopology.EDGE:
+                continue
+            if asset.endpoint_location_id is None:
+                continue
+            ends = normalize_edge_endpoints(
+                asset.location_id, asset.endpoint_location_id
+            )
+            if ends != (left, right):
+                continue
+            if asset.status is InfrastructureStatus.DESTROYED:
+                continue
+            matches.append(asset)
+    if not matches:
+        _LOG.debug(
+            "disaster_infrastructure_skipped outcome=%s",
+            DisasterSkipReason.NO_LIVE_ASSET.value,
+        )
+        return state, DisasterSkipReason.NO_LIVE_ASSET, None
+    if len(matches) > 1:
+        _LOG.debug(
+            "disaster_infrastructure_skipped outcome=%s",
+            DisasterSkipReason.ASSET_AMBIGUOUS.value,
+        )
+        return state, DisasterSkipReason.ASSET_AMBIGUOUS, None
+    asset = matches[0]
+    if asset.integrity <= 0.0:
+        raise _fail("infrastructure_live_integrity_invalid")
+    destroyed = dc_replace(
+        asset,
+        integrity=0.0,
+        status=_status_for(asset.kind, 0.0),
+    )
+    if destroyed.status is not InfrastructureStatus.DESTROYED:
+        raise _fail("infrastructure_destroy_status_invalid")
+    merged = dict(current)
+    merged[destroyed.asset_id] = destroyed
+    detail = event_detail_for_asset(
+        destroyed, tick=tick, event_kind="infrastructure_destroyed"
+    )
+    _LOG.debug(
+        "disaster_infrastructure_destroyed kind=%s tick=%s",
+        destroyed.kind.value,
+        tick,
+    )
+    return rebuild_world_state(state, infrastructure=merged), destroyed, detail
 
 
 def decay_infrastructure(

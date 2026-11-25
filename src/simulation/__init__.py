@@ -411,6 +411,7 @@ from simulation.delegation_representation_ports import (
 from simulation.delegation_representation_ports import (
     MAX_CANDIDATE_DETAIL_ROWS as DELEGATION_REPRESENTATION_MAX_CANDIDATE_DETAIL_ROWS,
 )
+from simulation.disasters_config import DisastersSpec
 from simulation.disease_config import DiseaseMechanicsSpec
 from simulation.dispute_codec import (
     compute_dispute_publication_id,
@@ -1319,6 +1320,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V60,
     RUNNER_SCHEMA_VERSION_V61,
     RUNNER_SCHEMA_VERSION_V62,
+    RUNNER_SCHEMA_VERSION_V63,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ArtifactInterpretationMode,
@@ -1899,6 +1901,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V60",
     "RUNNER_SCHEMA_VERSION_V61",
     "RUNNER_SCHEMA_VERSION_V62",
+    "RUNNER_SCHEMA_VERSION_V63",
     "SCALE_CONTRACT_VERSION",
     "SCALE_MAX_PARTITIONS",
     "SCALE_MAX_POPULATION",
@@ -2133,6 +2136,7 @@ __all__ = [
     "DependencyBindingPolicy",
     "DetachedInspectionProjector",
     "DetachedObjectiveProjection",
+    "DisastersSpec",
     "DiseaseMechanicsSpec",
     "DisputeArtifactError",
     "DisputeAuthorityReferenceRecord",

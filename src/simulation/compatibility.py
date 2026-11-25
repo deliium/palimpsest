@@ -107,6 +107,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V60,
     RUNNER_SCHEMA_VERSION_V61,
     RUNNER_SCHEMA_VERSION_V62,
+    RUNNER_SCHEMA_VERSION_V63,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -171,6 +172,7 @@ V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "science",
         "epidemics",
         "ecological_feedback",
+        "disasters",
     }
 )
 
@@ -580,8 +582,14 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "commons-governance family: the exact v61 overexploitation family "
             "plus mandatory commons_governance, preserving optional inherited "
             "measurement, disease, and medical siblings; "
+            f"{RUNNER_SCHEMA_VERSION_V63} is the accepted V4-39 disasters "
+            "family: the exact v60 ecology family plus mandatory disasters, "
+            "with optional overexploitation and commons_governance under the "
+            "same sibling validation conditions as v61/v62, preserving optional "
+            "inherited measurement, disease, and medical siblings; disasters "
+            "is owned and selects write pair event 26 / codec v24; "
             f"default write remains {RUNNER_SCHEMA_VERSION_V4} and the latest "
-            f"opt-in cognition runner is {RUNNER_SCHEMA_VERSION_V62})."
+            f"opt-in cognition runner is {RUNNER_SCHEMA_VERSION_V63})."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
@@ -823,8 +831,8 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{RUNNER_SCHEMA_VERSION_V56}; V4-17 deepens infrastructure_networks "
             "without adding a V4 flag or v57; V4-20 owns markets_credit and V4-27 "
             "owns science, V4-34 owns epidemics, and V4-36 owns "
-            "ecological_feedback, so eleven flags are owned and one remains "
-            "unowned; any enabled unowned flag fails closed at "
+            "ecological_feedback and disasters, so all twelve flags are owned; "
+            "any enabled unowned flag fails closed at "
             "SimulationRunner.from_config with "
             "capability_unimplemented (stage v4_capability_flags)"
         ),
@@ -900,6 +908,7 @@ _LOG.debug(
         "runner_v60": RUNNER_SCHEMA_VERSION_V60,
         "runner_v61": RUNNER_SCHEMA_VERSION_V61,
         "runner_v62": RUNNER_SCHEMA_VERSION_V62,
+        "runner_v63": RUNNER_SCHEMA_VERSION_V63,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

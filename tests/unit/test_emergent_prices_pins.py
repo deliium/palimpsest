@@ -72,7 +72,7 @@ def test_final_v4_21_pins() -> None:
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 29
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS

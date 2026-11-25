@@ -47,4 +47,4 @@ def test_market_modules_exist_and_own_no_world_event() -> None:
 
 def test_catalog_and_pins() -> None:
     assert METRIC_FAMILY_COUNT == 275
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12

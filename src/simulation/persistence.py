@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, TypedDict
 
 if TYPE_CHECKING:
     from simulation.branching import BranchLineage
+    from simulation.disasters_checkpoint import DisasterStateSection
     from simulation.disease_checkpoint import DiseaseCheckpointSection
     from simulation.disease_config import DiseaseMechanicsSpec
     from simulation.ecological_resources_checkpoint import (
@@ -72,6 +73,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V23,
     EVENT_SCHEMA_REPLAY_V24,
     EVENT_SCHEMA_REPLAY_V25,
+    EVENT_SCHEMA_REPLAY_V26,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
     EVENT_SCHEMA_REPLAY_V29,
@@ -121,6 +123,7 @@ class SnapshotExtensions(TypedDict, total=False):
     disease_mechanics: DiseaseCheckpointSection
     ecological_resources: EcologicalResourcesCheckpointSection
     environmental_dynamics: EnvironmentalDynamicsSpec
+    disaster_state: DisasterStateSection
 
 
 # New-write versions for physical replay-v5 runs (structured communication).
@@ -156,6 +159,7 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
@@ -187,6 +191,7 @@ ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
         "v21",
         "v22",
         "v23",
+        "v24",
         "v25",
         "v26",
         "v27",
@@ -310,14 +315,34 @@ def checkpoint_schema_for_production(
     disease_active: bool = False,
     ecological_feedback_active: bool = False,
     overexploitation_active: bool = False,
+    disasters_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    Priority: overexploitation → ``(29, v27)``; else ecology → ``(25, v23)``;
-    else disease → ``(24, v22)``; else measurement → ``(28, v26)``;
-    else travel → ``(27, v25)``; else infrastructure → ``(23, v21)``; …
-    Schema numbers are not capability order.
+    Priority: disasters → ``(26, v24)``; else overexploitation → ``(29, v27)``;
+    else ecology → ``(25, v23)``; else disease → ``(24, v22)``; else
+    measurement → ``(28, v26)``; else travel → ``(27, v25)``; else
+    infrastructure → ``(23, v21)``; … Schema numbers are not capability order.
     """
+    if disasters_active:
+        if not ecological_feedback_active:
+            raise ValueError("disasters_requires_ecological_feedback")
+        from simulation.versioning import (
+            DISASTERS_WRITE_PAIR_CODEC,
+            DISASTERS_WRITE_PAIR_EVENT,
+        )
+
+        pair = (
+            DISASTERS_WRITE_PAIR_EVENT,
+            DISASTERS_WRITE_PAIR_CODEC,
+        )
+        _LOG.info(
+            "checkpoint_schema_selected schema_version=%s codec=%s "
+            "reason=disasters_active",
+            pair[0],
+            pair[1],
+        )
+        return pair
     if overexploitation_active:
         if not ecological_feedback_active:
             raise ValueError("overexploitation_requires_ecological_feedback")
@@ -584,8 +609,10 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V26,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
         EVENT_SCHEMA_REPLAY_V29,
@@ -776,6 +803,7 @@ class WorldSnapshot:
     disease_mechanics: DiseaseCheckpointSection | None = None
     ecological_resources: EcologicalResourcesCheckpointSection | None = None
     environmental_dynamics: EnvironmentalDynamicsSpec | None = None
+    disaster_state: DisasterStateSection | None = None
 
     @staticmethod
     def _measurement_rows(
@@ -928,7 +956,8 @@ class WorldSnapshot:
                     f"codec {self.persistence_codec_version} requires "
                     "infrastructure channel rows"
                 )
-        elif self.persistence_codec_version in {"v22", "v23"}:
+        elif self.persistence_codec_version in {"v22", "v23", "v24"}:
+            # v24 may carry infrastructure when disasters compose with the channel.
             pass
         elif infra_rows is not None:
             raise ValueError("infrastructure checkpoint fields require codec v21")
@@ -959,7 +988,7 @@ class WorldSnapshot:
                 and self.regions_migration is None
             ):
                 raise ValueError("travel_network_checkpoint_requires_regions")
-        elif self.persistence_codec_version in {"v22", "v23", "v27"}:
+        elif self.persistence_codec_version in {"v22", "v23", "v24", "v27"}:
             pass
         elif route_rows is not None:
             raise ValueError("travel_network_checkpoint_fields_require_codec_v25")
@@ -1065,21 +1094,56 @@ class WorldSnapshot:
                     raise TypeError(
                         "v27 disease_mechanics must be DiseaseCheckpointSection"
                     )
+            if self.disaster_state is not None:
+                raise ValueError("disaster_state requires codec v24")
+        elif self.persistence_codec_version == "v24":
+            from simulation.disasters_checkpoint import DisasterStateSection
+            from simulation.ecological_resources_checkpoint import (
+                EcologicalResourcesCheckpointSection,
+            )
+            from simulation.versioning import (
+                DISASTERS_WRITE_PAIR_EVENT,
+            )
+
+            if self.event_schema_version != DISASTERS_WRITE_PAIR_EVENT:
+                raise ValueError("codec v24 requires event schema 26")
+            if self.projector_version != "v2":
+                raise ValueError("codec v24 requires projector v2")
+            if (
+                type(self.ecological_resources)
+                is not EcologicalResourcesCheckpointSection
+            ):
+                raise TypeError(
+                    "codec v24 requires EcologicalResourcesCheckpointSection"
+                )
+            if type(self.environmental_dynamics) is not EnvironmentalDynamicsSpec:
+                raise TypeError("codec v24 requires EnvironmentalDynamicsSpec")
+            if type(self.disaster_state) is not DisasterStateSection:
+                raise TypeError("codec v24 requires DisasterStateSection")
+            if self.disease_mechanics is not None:
+                from simulation.disease_checkpoint import DiseaseCheckpointSection
+
+                if type(self.disease_mechanics) is not DiseaseCheckpointSection:
+                    raise TypeError(
+                        "v24 disease_mechanics must be DiseaseCheckpointSection"
+                    )
         elif self.disease_mechanics is not None:
             raise ValueError("disease_mechanics checkpoint requires codec v22")
         elif self.ecological_resources is not None:
             raise ValueError(
-                "ecological_resources checkpoint requires codec v23 or v27"
+                "ecological_resources checkpoint requires codec v23, v24, or v27"
             )
         elif self.environmental_dynamics is not None:
             raise ValueError(
-                "environmental_dynamics checkpoint requires codec v23 or v27"
+                "environmental_dynamics checkpoint requires codec v23, v24, or v27"
             )
+        elif self.disaster_state is not None:
+            raise ValueError("disaster_state requires codec v24")
         # Reuse bootstrap graph validation and ordered copying (inventory order
         # is preserved inside AgentBody).
         ecology_bootstrap = None
         ecology_digest = None
-        if self.persistence_codec_version in {"v23", "v27"}:
+        if self.persistence_codec_version in {"v23", "v24", "v27"}:
             assert self.ecological_resources is not None
             from simulation.bootstrap import (
                 _ecological_digest_from_snapshot,
@@ -2027,6 +2091,7 @@ class ReplayRequest:
     kinship_spec: object | None = None
     disease_mechanics: DiseaseMechanicsSpec | None = None
     ecological_resources: object | None = None
+    disasters: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:
@@ -2052,6 +2117,13 @@ class ReplayRequest:
                 raise TypeError(
                     "ReplayRequest.ecological_resources must be "
                     "EcologicalResourcesSpec or None"
+                )
+        if self.disasters is not None:
+            from simulation.disasters_config import DisastersSpec
+
+            if type(self.disasters) is not DisastersSpec:
+                raise TypeError(
+                    "ReplayRequest.disasters must be DisastersSpec or None"
                 )
 
 

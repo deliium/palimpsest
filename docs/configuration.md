@@ -307,7 +307,7 @@ replay/codec write pairs remain channel-selected. See
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
 do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
 explicit scaffolding identity only: it is the active v55 family keyset plus one
-closed `v4_capability_flags` sibling. The accepted set has eleven owned V4 flags
+closed `v4_capability_flags` sibling. The accepted set has twelve owned V4 flags
 that may construct on the accepted v56 seam: `organizations`
 (V4-03/V4-04/V4-05), `formal_rules` (V4-06), `legal_disputes` (V4-07),
 `diplomacy` (V4-10/V4-11), `organized_conflict` (V4-12, requiring
@@ -315,14 +315,15 @@ that may construct on the accepted v56 seam: `organizations`
 `markets_credit` (V4-20/V4-21), `science` (V4-27, requiring
 `predictive_world_model` and `bounded_experimentation`), `epidemics`
 (V4-34, requiring `infrastructure_networks`, `collective_projects`, and the
-exact `runner-config-v58` `disease_mechanics` sibling), and
+exact `runner-config-v58` `disease_mechanics` sibling),
 `ecological_feedback` (V4-36, requiring `supply_chains`,
 `environmental_dynamics`, and the exact `runner-config-v60`
 `ecological_resources` sibling; deepened by V4-37 on `runner-config-v61`
 with the exact `overexploitation` sibling and by V4-38 on
 `runner-config-v62` with exact `commons_governance` while keeping the same owned
-flag). The remaining V4 flag — `disasters` — stays unowned and fails closed
-at `SimulationRunner.from_config`.
+flag), and `disasters` (V4-39, requiring ecology plus
+`environmental_dynamics` on exact `runner-config-v63` with the
+`disasters` sibling).
 
 ## Organized conflict (`runner-config-v56`)
 
@@ -690,6 +691,15 @@ social-norm and institution-concept modes. World replay stays event 29 /
 codec `v27`; pending owner state may use `finalization-command-v7`. Legacy
 v61/v60 documents stay accepted. Capture is programmatic and default off.
 See [Commons governance](commons-governance.md).
+
+`runner-config-v63` is the exact v60/v61/v62 ecology family plus mandatory
+`disasters` with `policy_id` `disasters.v1`, closed rules, and an optional
+schedule. It requires `ecological_feedback`, `supply_chains`, and
+`environmental_dynamics`. Infrastructure destruction also requires
+`infrastructure_networks`; epidemic surge also requires active disease.
+Disaster-active runs write reserved event **26** / codec **`v24`**. Legacy
+feature-off and prior-channel selections stay accepted. No environment
+variable, route, or migration is added. See [Disasters](disasters.md).
 
 ## Optional scientific models (V4-30)
 

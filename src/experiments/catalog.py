@@ -2844,6 +2844,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "medical_beliefs@1",
         "commons_governance@1",
         "commons_governance_two_pools@1",
+        "disasters@1",
     }
 )
 
@@ -6018,6 +6019,28 @@ def experiment_commons_governance_two_pools(
     _LOG.info(
         "experiment_registered experiment_id=commons_governance_two_pools@1 "
         "arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_disasters(
+    base: SimulationRunnerConfig,
+    *,
+    treatment_entry: object,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+) -> ExperimentDefinition:
+    """Off-gate V4-39 experiment: paired control vs scheduled disaster shock."""
+    from experiments.disaster_scenario import disasters_scenario
+    from world.disasters import DisasterScheduleEntry
+
+    if type(treatment_entry) is not DisasterScheduleEntry:
+        raise TypeError("treatment_entry must be DisasterScheduleEntry")
+    definition = disasters_scenario(
+        base, treatment_entry=treatment_entry, seed_matrix=seed_matrix
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=disasters@1 arms=%s",
         len(definition.conditions),
     )
     return definition

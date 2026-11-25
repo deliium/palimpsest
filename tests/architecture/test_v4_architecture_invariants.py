@@ -118,6 +118,7 @@ ALLOWED_FLAG_REFERENCES = {
     "experiments/supply_chain_scenario.py",
     "experiments/disease_scenario.py",
     "experiments/commons_governance_scenario.py",
+    "experiments/disaster_scenario.py",
     "research_runner/path_dependence_cli.py",
     "research_runner/path_dependence_composition.py",
     "simulation/replay.py",
@@ -240,6 +241,7 @@ def test_context_registry_and_capability_ownership() -> None:
             "science",
             "epidemics",
             "ecological_feedback",
+            "disasters",
         }:
             assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
@@ -286,6 +288,7 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
             "science",
             "epidemics",
             "ecological_feedback",
+            "disasters",
         }
     )
     assert V4ContextId.LEGAL_DISPUTES in V4_CONTEXT_BY_ID
@@ -473,6 +476,7 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
             "science",
             "epidemics",
             "ecological_feedback",
+            "disasters",
         }
     )
     assert V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS].authority is (

@@ -79,21 +79,11 @@ def test_catalog_is_160_with_evidence_families_last() -> None:
     ]
 
 
-def test_formal_rules_flag_is_owned_and_one_flag_remains_unowned() -> None:
+def test_formal_rules_flag_is_owned_and_no_flag_remains_unowned() -> None:
     assert Flags(formal_rules=True).owned_enabled_names() == ("formal_rules",)
     assert Flags(legal_disputes=True).owned_enabled_names() == ("legal_disputes",)
-    assert (
-        len(
-            [
-                name
-                for name in (
-                    "disasters",
-                )
-                if Flags(**{name: True}).unimplemented_enabled_names()
-            ]
-        )
-        == 1
-    )
+    assert Flags(disasters=True).owned_enabled_names() == ("disasters",)
+    assert Flags(disasters=True).unimplemented_enabled_names() == ()
 
 
 def test_six_formal_rule_routes_and_six_organization_routes() -> None:

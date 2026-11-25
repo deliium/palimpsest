@@ -85,6 +85,7 @@ class ObjectiveEvidenceLoaderPort(Protocol):
         after: EventKeysetCursor | None = None,
         limit: int = 100,
         manifest: EvidenceManifest | None = None,
+        exclude_event_types: frozenset[str] | set[str] | None = None,
     ) -> object: ...
 
 
@@ -317,7 +318,10 @@ class PersistenceInspectionService(InspectionService):
         )
         try:
             page = await self._evidence.objective.load_events_page(
-                run_id=run_id, after=cursor, limit=limit
+                run_id=run_id,
+                after=cursor,
+                limit=limit,
+                exclude_event_types=frozenset({"disaster_resolved"}),
             )
         except PersistenceNotFoundError as exc:
             raise not_found(code=exc.code, run_id=run_id) from exc

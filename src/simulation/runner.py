@@ -2685,6 +2685,22 @@ class SimulationRunner:
                     len(ecological_rows),
                     config.schema_version,
                 )
+            disaster_bootstrap_state = None
+            if config.disasters is not None and config.v4_capability_flags.disasters:
+                from simulation.disasters_config import policy_sha256_for_disasters
+                from world._disasters import DisasterState
+
+                disaster_bootstrap_state = DisasterState(
+                    policy_sha256=policy_sha256_for_disasters(config.disasters),
+                    overexploitation_active=config.overexploitation is not None,
+                    applied_rule_ids=(),
+                )
+                _LOG.info(
+                    "runner_construction_disasters_channel rule_count=%s "
+                    "schema_version=%s",
+                    len(config.disasters.rules),
+                    config.schema_version,
+                )
             bootstrap = WorldBootstrap(
                 world_id=config.scenario.world_id,
                 revision=config.scenario.revision,
@@ -2709,6 +2725,7 @@ class SimulationRunner:
                 disease_state=disease_bootstrap_state,
                 ecological_resources=ecological_rows,
                 ecological_policy_digest=ecological_digest,
+                disaster_state=disaster_bootstrap_state,
             )
             translator = registration_translator(bootstrap)
             _validate_registration_ownership(config, bootstrap)
@@ -2923,6 +2940,11 @@ class SimulationRunner:
                     else None
                 ),
                 overexploitation_active=config.overexploitation is not None,
+                disasters=(
+                    config.disasters
+                    if config.v4_capability_flags.disasters
+                    else None
+                ),
             )
             _LOG.debug(
                 "artifact_write_pair_inputs artifacts_active=%s "
@@ -8048,7 +8070,55 @@ def _engine_snapshot(
         disease_active=engine._disease_mechanics is not None,
         ecological_feedback_active=engine._ecological_resources is not None,
         overexploitation_active=engine._overexploitation_active,
+        disasters_active=engine._disasters is not None,
     )
+    if codec_version == "v24":
+        from dataclasses import replace as _dc_replace
+
+        from simulation.disasters_checkpoint import build_v24_checkpoint_extensions
+        from world.kinship import KinshipGraph
+
+        kinship_graph = engine.kinship_graph
+        kinship_edges = (
+            kinship_graph.edges if type(kinship_graph) is KinshipGraph else ()
+        )
+        assert engine._environmental_dynamics is not None
+        v24_rows = build_v24_checkpoint_extensions(
+            state=state,
+            lifecycle_records=tuple(engine.lifecycle_records),
+            kinship_edges=kinship_edges,
+            dependency_need_registers=tuple(
+                engine._dependency_need_registers.values()
+            ),
+            environmental_dynamics=engine._environmental_dynamics,
+            disease_spec=engine._disease_mechanics,
+            travel_network_active=engine.travel_network_active,
+            infrastructure_networks_active=engine.infrastructure_networks_active,
+            measurement_active=bool(state.instrument_states),
+        )
+        draft = WorldSnapshot(
+            snapshot_id=snapshot_id,
+            run_id=engine.run_id,
+            world_id=engine.world_id,
+            seed=engine._config.seed,
+            config=engine._config,
+            registrations=engine._registrations,
+            locations=tuple(engine._snapshot.world.state.locations.values()),
+            bodies=tuple(engine._snapshot.world.state.bodies.values()),
+            items=tuple(engine._snapshot.world.state.items.values()),
+            resources=tuple(engine._snapshot.world.state.resources.values()),
+            weather=tuple(engine._snapshot.world.state.weather.values()),
+            next_tick=next_tick,
+            revision=engine.revision,
+            event_schema_version=schema_version,
+            projector_version="v2",
+            persistence_codec_version=codec_version,
+            derivation_version=engine._config.derivation_version or "v3",
+            integrity_hash=PayloadHash("0" * 64),
+            predecessor_commit_hash=predecessor_commit_hash,
+            **v24_rows,
+        )
+        return _dc_replace(draft, integrity_hash=hash_snapshot(draft))
     if codec_version == "v27":
         from dataclasses import replace as _dc_replace
 

@@ -69,11 +69,9 @@ def test_no_accounting_context_flag_or_schema_bump() -> None:
     assert "accounting_ledgers" not in V4_CAPABILITY_FLAGS
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
     unowned = set(V4_CAPABILITY_FLAGS) - set(V4_OWNED_CAPABILITY_FLAGS)
-    assert unowned == {
-        "disasters",
-    }
+    assert unowned == set()
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -87,6 +85,7 @@ def test_no_accounting_context_flag_or_schema_bump() -> None:
             "science",
             "epidemics",
             "ecological_feedback",
+        "disasters",
         }
     )
     token = "runner-config-" + "v62"

@@ -53,6 +53,7 @@ _OWNED_FLAGS = frozenset(
             "science",
             "epidemics",
         "ecological_feedback",
+        "disasters",
         }
 )
 
@@ -89,7 +90,7 @@ def test_v4_10_owns_diplomacy_without_new_schema() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == _OWNED_FLAGS
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
 
     diplomacy = V4_CONTEXT_BY_ID[V4ContextId.DIPLOMACY]
     assert diplomacy.authority is V4Authority.OWNER_SCOPED
@@ -114,7 +115,7 @@ def test_v4_10_owns_diplomacy_without_new_schema() -> None:
         str(path.relative_to(_SRC))
         for path in sorted(_SRC.rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v63" in path.read_text(encoding="utf-8")
+        and "runner-config-v64" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
 

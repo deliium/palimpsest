@@ -46,11 +46,10 @@ def test_science_ownership_pins() -> None:
             "science",
             "epidemics",
         "ecological_feedback",
+        "disasters",
         }
     )
-    assert set(V4_CAPABILITY_FLAGS) - V4_OWNED_CAPABILITY_FLAGS == {
-        "disasters",
-    }
+    assert set(V4_CAPABILITY_FLAGS) - V4_OWNED_CAPABILITY_FLAGS == set()
 
 
 def test_catalog_and_wire_pins() -> None:
@@ -93,7 +92,7 @@ def test_no_v57_or_v2_route_exists() -> None:
     assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in (ROOT / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        assert "runner-config-v63" not in text, path
+        assert "runner-config-v64" not in text, path
         assert '"/v2' not in text, path
 
 

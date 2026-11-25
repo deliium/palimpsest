@@ -52,7 +52,7 @@ def test_markets_credit_seam_is_unchanged() -> None:
 def test_context_and_flag_counts_stay_owned() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -66,6 +66,7 @@ def test_context_and_flag_counts_stay_owned() -> None:
             "science",
             "epidemics",
         "ecological_feedback",
+        "disasters",
         }
     )
 

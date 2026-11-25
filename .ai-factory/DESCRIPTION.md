@@ -1006,8 +1006,18 @@ scheduler, sanction executor, or physical admission change. Pending uses
 `finalization-command-v7` / `commons-governance-state-v1`. Programmatic
 `commons-governance-report-v1` and off-gate paired experiments
 `commons_governance@1` / `commons_governance_two_pools@1` stay detached.
-Pins: 275 metric families, 17 V4 contexts, 12 V4 flags (eleven owned / one
-unowned; only `disasters` remains unowned), 45 commands, 73 observer semantic
-types, runner default v4 with latest opt-in v62, pending default v1/latest v7,
-ecology replay 29/`v27`, `/v1`, `observer-protocol-v1`, Alembic `0017`; default
-result v2. See `docs/commons-governance.md`.
+Pins at that landing: 275 metric families, eleven owned / one unowned V4 flags.
+See `docs/commons-governance.md`.
+
+V4-39 (disasters, 2026-11-24) owns `disasters` on exact `runner-config-v63`
+with mandatory `disasters` / `disasters.v1`. Bounded one-tick pulses cover
+flood-like, fire, drought, resource collapse, infrastructure destruction, and
+epidemic surge against configured physical targets with integer ppm chances
+and optional schedules. Disaster-active runs write reserved event **26** /
+codec **`v24`**. Off-gate `disasters@1` pairs empty-schedule control with one
+scheduled shock. No new command, route, metric-catalog append, or SQL
+migration. Pins: 275 metric families, 17 V4 contexts, 12 V4 flags (all owned),
+45 commands, 73 observer semantic types, runner default v4 with latest opt-in
+v63, ecology replay 29/`v27`, disaster replay 26/`v24`, `/v1`,
+`observer-protocol-v1`, Alembic `0017`; default result v2. See
+`docs/disasters.md`.

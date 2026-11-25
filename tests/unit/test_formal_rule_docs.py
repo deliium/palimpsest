@@ -70,12 +70,12 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
     assert "six GET-only" in docs_architecture
 
 
-def test_configuration_documents_four_owned_and_eight_unowned_flags() -> None:
+def test_configuration_documents_twelve_owned_flags() -> None:
     text = (ROOT / "docs" / "configuration.md").read_text()
-    assert "eleven owned V4 flags" in text
+    assert "twelve owned V4 flags" in text
     assert "`organizations`" in text
     assert "`formal_rules`" in text
-    assert "remaining V4 flag — `disasters`" in text
+    assert "`disasters`" in text
     assert "PALIMPSEST_FORMAL_RULE_ROOT" in text
     assert "PALIMPSEST_FORMAL_RULE_CURSOR_KEY" in text
     assert "--formal-rule-root" in text
@@ -83,18 +83,23 @@ def test_configuration_documents_four_owned_and_eight_unowned_flags() -> None:
     assert "other eleven V4 flags" not in text
 
 
-def test_current_v4_docs_state_the_four_owned_flags() -> None:
+def test_current_v4_docs_state_twelve_owned_flags() -> None:
     research_api = (ROOT / "docs" / "research-api.md").read_text()
     assert "all V4 flags are unowned" not in research_api
-    assert "only `disasters` remains unowned" in research_api
+    assert (
+        "all twelve flags are owned" in research_api
+        or "Twelve V4 flags are owned" in research_api
+    )
     assert "`organizations`" in research_api
     assert "`formal_rules`" in research_api
+    assert "`disasters`" in research_api
 
     v4_doc = " ".join((ROOT / "docs" / "v4-architecture.md").read_text().split())
     assert "Every V4 capability flag is closed, unowned" not in v4_doc
-    assert "only `disasters` remains unowned" in v4_doc
+    assert "all twelve" in v4_doc.lower() or "twelve flags are owned" in v4_doc.lower()
     assert "`organizations`" in v4_doc
     assert "`formal_rules`" in v4_doc
+    assert "`disasters`" in v4_doc
 
 
 def test_architecture_v4_05_seam_keeps_its_own_metric_count() -> None:

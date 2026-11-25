@@ -174,15 +174,15 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-38
+### Current baseline through V4-39
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
-| Latest feature runner | `runner-config-v62` for commons governance (v61 overexploitation family plus mandatory `commons_governance`); `runner-config-v61` remains overexploitation; `runner-config-v60` remains ecological resources; `runner-config-v59` remains medical beliefs; accepted `runner-config-v56` carries V4 capability flags |
+| Latest feature runner | `runner-config-v63` for disasters (ecology family plus mandatory `disasters`); `runner-config-v62` remains commons governance; `runner-config-v61` remains overexploitation; `runner-config-v60` remains ecological resources; `runner-config-v59` remains medical beliefs; accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 45 / 73 |
-| Metric families | 275 (unchanged by V4-36–V4-38; programmatic commons reports only) |
-| Latest replay / codec pair | Active ecology / overexploitation keep event 29 / codec `v27` / projector `v2`; disease-active runs use reserved event 24 / codec `v22`; measurement instruments still select `EVENT_SCHEMA_REPLAY_V28` / `v26`; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted |
+| Metric families | 275 (unchanged by V4-36–V4-39; programmatic commons reports only) |
+| Latest replay / codec pair | Disaster-active runs use reserved event 26 / codec `v24`; active ecology / overexploitation keep event 29 / codec `v27` / projector `v2`; disease-active runs use reserved event 24 / codec `v22`; measurement instruments still select `EVENT_SCHEMA_REPLAY_V28` / `v26`; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted |
 | Subjective pending codec | `finalization-command-v7` adds `commons-governance-state-v1` to the v6 medical/science/measurement state; `finalization-command-v6` remains medical beliefs; default is `finalization-command-v1`; this is not a world replay codec |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -206,9 +206,9 @@ those as current pins or silently drop their legacy accepted versions.
   (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11),
   `organized_conflict` (V4-12), `infrastructure_networks` (V4-16),
   `supply_chains` (V4-19), `markets_credit` (V4-20/V4-21), `science`
-  (V4-27/V4-28), and `epidemics` (V4-34).
-  There are eleven owned V4 flags and one unowned flag.
-  Only `disasters` remains unowned and fails closed.
+  (V4-27/V4-28), `epidemics` (V4-34), `ecological_feedback` (V4-36),
+  and `disasters` (V4-39).
+  There are twelve owned V4 flags and zero unowned V4 flags.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -1168,7 +1168,7 @@ programmatically and atomically; seven GET-only
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score, or
 canonical credit exists. See `docs/credit-relationships.md`.
 
-only `disasters` remains unowned; `ecological_feedback` is owned by V4-36;
+`ecological_feedback` is owned by V4-36; `disasters` is owned by V4-39;
 `markets_credit` is owned by V4-20/V4-21/V4-22.
 
 
@@ -1530,5 +1530,15 @@ turns, sanctions, and access never enter physical admission. Pending uses
 and Alembic `0017` stay unchanged. Detached programmatic
 `commons-governance-report-v1` and off-gate paired experiments
 `commons_governance@1` / `commons_governance_two_pools@1` stay research-only.
-Pins stay eleven owned V4 flags / one unowned (`disasters`). See
-`docs/commons-governance.md`.
+Pins at that landing stayed eleven owned V4 flags / one unowned (`disasters`).
+V4-39 later owns `disasters`. See `docs/commons-governance.md`.
+
+### V4-39 disasters seam
+
+V4-39 owns `disasters` on exact `runner-config-v63` with mandatory
+`disasters` (`disasters.v1`). Bounded one-tick pulses cover flood-like, fire,
+drought, resource collapse, infrastructure destruction, and epidemic surge
+against configured physical targets. Disaster-active runs select reserved
+event 26 / codec `v24`. No new command, route, metric-catalog append, or SQL
+migration. From this landing all twelve V4 flags are owned. See
+`docs/disasters.md`.

@@ -63,7 +63,7 @@ def test_final_v4_22_pins() -> None:
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
     assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not list((ROOT / "alembic" / "versions").glob("0018*"))

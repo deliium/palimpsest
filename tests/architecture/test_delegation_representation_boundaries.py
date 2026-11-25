@@ -89,6 +89,7 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
         "science",
         "epidemics",
     "ecological_feedback",
+    "disasters",
     }
 
     organizations = V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS]
@@ -112,7 +113,7 @@ def test_no_runner_config_v57_literal_in_source() -> None:
     for path in sorted(_SRC.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
-        if "runner-config-v63" in path.read_text(encoding="utf-8"):
+        if "runner-config-v64" in path.read_text(encoding="utf-8"):
             offenders.append(str(path.relative_to(_SRC)))
     assert offenders == []
 

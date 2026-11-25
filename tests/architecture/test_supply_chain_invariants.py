@@ -47,10 +47,8 @@ _FORBIDDEN_AUTHORITY = {
 def test_v4_19_owns_supply_chains() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
-    assert set(V4_CAPABILITY_FLAGS) - set(V4_OWNED_CAPABILITY_FLAGS) == {
-        "disasters",
-    }
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
+    assert set(V4_CAPABILITY_FLAGS) - set(V4_OWNED_CAPABILITY_FLAGS) == set()
     assert V4_OWNED_CAPABILITY_FLAGS == _V4_OWNED_CAPABILITY_FLAGS
     assert "supply_chains" in V4_OWNED_CAPABILITY_FLAGS
     context = v4_context_for_flag("supply_chains")

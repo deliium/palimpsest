@@ -287,6 +287,7 @@ def test_v4_registry_keeps_fourteen_contexts_and_ownership_split() -> None:
             "science",
             "epidemics",
         "ecological_feedback",
+        "disasters",
         }:
             continue
         flags = V4CapabilityFlags(**{name: True})

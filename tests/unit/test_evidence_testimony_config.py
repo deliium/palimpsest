@@ -110,6 +110,7 @@ def test_v4_registry_keeps_fourteen_contexts_and_twelve_flags() -> None:
         "science",
         "epidemics",
     "ecological_feedback",
+    "disasters",
     }
 
 

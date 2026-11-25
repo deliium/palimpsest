@@ -57,7 +57,7 @@ family. v56 never adds a generational run by itself.
   matrix finalization never emit it on their own.
 - Default writes stay `runner-config-v4`; the latest feature runner stays
   `runner-config-v55`.
-- Eleven V4 flags are owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`, `organized_conflict`, `infrastructure_networks`, `supply_chains`, `markets_credit`, `science`, `epidemics`, `ecological_feedback`); only `disasters` remains unowned. Enabling an unowned flag requires v56 and then fails closed
+- All twelve V4 flags are owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`, `organized_conflict`, `infrastructure_networks`, `supply_chains`, `markets_credit`, `science`, `epidemics`, `ecological_feedback`, `disasters`). Enabling an unowned flag requires v56 and then fails closed
   at `SimulationRunner.from_config` with `capability_unimplemented` and
   `stage="v4_capability_flags"`.
 - Decoding a v1–v55 payload synthesizes `V4CapabilityFlags()` (all off).
@@ -85,7 +85,8 @@ The other nine contexts are declared event-reusing
 (`V4_EVENT_REUSING_CONTEXTS`): they must express their phenomena through existing
 commands, events, records, and speech. A later plan that activates a reservation
 must still prove effect-complete details, replay, and a persistence need.
-`disasters` remains reserved and unowned.
+`disasters` is owned by V4-39 on `runner-config-v63` with reserved write pair
+26/`v24`.
 
 ## Observer negotiation
 

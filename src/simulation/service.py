@@ -155,7 +155,55 @@ class PersistentSimulationService:
                 self._engine._ecological_resources is not None
             ),
             overexploitation_active=self._engine._overexploitation_active,
+            disasters_active=self._engine._disasters is not None,
         )
+        if codec_version == "v24":
+            from dataclasses import replace as _dc_replace
+
+            from simulation.disasters_checkpoint import build_v24_checkpoint_extensions
+            from world.kinship import KinshipGraph
+
+            graph = self._engine.kinship_graph
+            kinship_edges = graph.edges if type(graph) is KinshipGraph else ()
+            assert self._engine._environmental_dynamics is not None
+            v24_rows = build_v24_checkpoint_extensions(
+                state=state,
+                lifecycle_records=tuple(self._engine.lifecycle_records),
+                kinship_edges=kinship_edges,
+                dependency_need_registers=tuple(
+                    self._engine._dependency_need_registers.values()
+                ),
+                environmental_dynamics=self._engine._environmental_dynamics,
+                disease_spec=self._engine._disease_mechanics,
+                travel_network_active=self._engine.travel_network_active,
+                infrastructure_networks_active=(
+                    self._engine.infrastructure_networks_active
+                ),
+                measurement_active=bool(state.instrument_states),
+            )
+            draft = WorldSnapshot(
+                snapshot_id=snapshot_id,
+                run_id=self._engine.run_id,
+                world_id=self._engine.world_id,
+                seed=self._engine._config.seed,
+                config=self._engine._config,
+                registrations=self._engine._registrations,
+                locations=tuple(state.locations.values()),
+                bodies=tuple(state.bodies.values()),
+                items=tuple(state.items.values()),
+                resources=tuple(state.resources.values()),
+                weather=tuple(state.weather.values()),
+                next_tick=next_snap.tick,
+                revision=candidate.resulting_revision,
+                event_schema_version=schema_version,
+                projector_version=PROJECTOR_VERSION,
+                persistence_codec_version=codec_version,
+                derivation_version=derivation,
+                integrity_hash=PayloadHash("a" * 64),
+                predecessor_commit_hash=None,
+                **v24_rows,
+            )
+            return _dc_replace(draft, integrity_hash=hash_snapshot(draft))
         if codec_version == "v27":
             from dataclasses import replace as _dc_replace
 

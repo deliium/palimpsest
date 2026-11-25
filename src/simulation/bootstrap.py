@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from agents.models import AgentId
 from simulation.registrations import AgentRegistration as AgentRegistration
+from world._disasters import DisasterState
 from world._disease import DiseaseConditionRow
 from world._ecological_resources import EcologicalStockRow
 from world.artifacts import InformationArtifact
@@ -96,6 +97,7 @@ class WorldBootstrap:
     disease_state: Mapping[EntityId, DiseaseConditionRow] | None = None
     ecological_resources: Mapping[EntityId, EcologicalStockRow] | None = None
     ecological_policy_digest: str | None = None
+    disaster_state: DisasterState | None = None
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -211,6 +213,13 @@ class WorldBootstrap:
                 "ecological_policy_digest",
                 self.ecological_policy_digest,
             )
+        if self.disaster_state is not None and type(self.disaster_state) is not (
+            DisasterState
+        ):
+            raise TypeError(
+                "WorldBootstrap.disaster_state must be DisasterState or None"
+            )
+        object.__setattr__(self, "disaster_state", self.disaster_state)
         _validate_registrations_against_models(
             locations=locations,
             items=items,
@@ -239,6 +248,7 @@ class WorldBootstrap:
                 disease_state=self.disease_state,
                 ecological_resources=self.ecological_resources,
                 ecological_policy_digest=self.ecological_policy_digest,
+                disaster_state=self.disaster_state,
             )
         except ValueError as exc:
             message = str(exc)
@@ -330,6 +340,7 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
             disease_state=bootstrap.disease_state,
             ecological_resources=bootstrap.ecological_resources,
             ecological_policy_digest=bootstrap.ecological_policy_digest,
+            disaster_state=bootstrap.disaster_state,
         )
     except ValueError as exc:
         message = str(exc)
@@ -472,7 +483,19 @@ def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
         disease_state=_disease_state_from_snapshot(snapshot),
         ecological_resources=_ecological_resources_from_snapshot(snapshot),
         ecological_policy_digest=_ecological_digest_from_snapshot(snapshot),
+        disaster_state=_disaster_state_from_snapshot(snapshot),
     )
+
+
+def _disaster_state_from_snapshot(snapshot: object) -> DisasterState | None:
+    section = getattr(snapshot, "disaster_state", None)
+    if section is None:
+        return None
+    from simulation.disasters_checkpoint import DisasterStateSection
+
+    if type(section) is not DisasterStateSection:
+        raise TypeError("snapshot.disaster_state must be DisasterStateSection")
+    return section.to_disaster_state()
 
 
 def _ecological_resources_from_snapshot(

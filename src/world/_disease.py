@@ -230,6 +230,7 @@ class DiseasePassResult:
     bodies: MappingProxyType[EntityId, AgentBody]
     mortality_body_ids: tuple[EntityId, ...]
     start_rows: MappingProxyType[EntityId, DiseaseConditionRow] | None
+    extra_latent_recipients: tuple[EntityId, ...] = ()
 
 
 def _journey_participants(state: object) -> frozenset[EntityId]:
@@ -275,23 +276,29 @@ def advance_disease_pass(
     active_ticks: int,
     immunity_after_recovery: bool,
     draw: Callable[[EntityId, str], bool],
+    extra_opportunity: Callable[[EntityId, EntityId], bool] | None = None,
 ) -> DiseasePassResult:
     """Advance private disease rows for one tick from a frozen start view.
 
     Does not import simulation. ``draw(entity_id, kind)`` must already encode
     ``randrange(1000) < threshold`` for kind in exposure|transmission|symptom|
-    terminal.
+    terminal. Optional ``extra_opportunity(location_id, entity_id)`` may supply a
+    second exposure chance only after ordinary exposure fails; transmission and
+    all other gates remain unchanged.
     """
     start_disease = getattr(start_state, "disease_state", None)
     working_bodies: Mapping[EntityId, AgentBody] = working_state.bodies  # type: ignore[attr-defined]
     bodies = dict(working_bodies)
     if start_disease is None:
+        if extra_opportunity is not None:
+            raise DiseaseInvariantError("disease_extra_without_channel")
         _LOG.debug("disease_pass_skipped channel=off tick=%s", tick)
         return DiseasePassResult(
             disease_state=None,
             bodies=MappingProxyType(bodies),
             mortality_body_ids=(),
             start_rows=None,
+            extra_latent_recipients=(),
         )
     if type(tick) is not int or isinstance(tick, bool) or tick < 0:
         raise DiseaseInvariantError("disease_tick_invalid")
@@ -309,6 +316,8 @@ def advance_disease_pass(
         raise DiseaseInvariantError("disease_active_ticks_invalid")
     if type(immunity_after_recovery) is not bool:
         raise DiseaseInvariantError("disease_immunity_flag_invalid")
+    if extra_opportunity is not None and not callable(extra_opportunity):
+        raise TypeError("extra_opportunity must be callable or None")
     start_rows = MappingProxyType(dict(start_disease))
     evolving: dict[EntityId, DiseaseConditionRow] = dict(start_rows)
     eligible = _eligible_settled_ids(
@@ -345,7 +354,8 @@ def advance_disease_pass(
         )
 
     # 2) Exposure / transmission for susceptibles (start-row absence only).
-    for _location_id, members in sorted(
+    extra_latent: list[EntityId] = []
+    for location_id, members in sorted(
         by_location.items(), key=lambda item: item[0].value
     ):
         if not any(entity_id in start_active_sources for entity_id in members):
@@ -353,8 +363,13 @@ def advance_disease_pass(
         for entity_id in members:
             if entity_id in start_rows:
                 continue
+            used_extra = False
             if not draw(entity_id, "exposure"):
-                continue
+                if extra_opportunity is None or not extra_opportunity(
+                    location_id, entity_id
+                ):
+                    continue
+                used_extra = True
             if not draw(entity_id, "transmission"):
                 continue
             evolving[entity_id] = DiseaseConditionRow(
@@ -362,6 +377,8 @@ def advance_disease_pass(
                 due_tick=tick + latent_ticks,
                 symptomatic=None,
             )
+            if used_extra:
+                extra_latent.append(entity_id)
 
     # 3) Terminal resolution for start-active rows due this tick.
     mortality: list[EntityId] = []
@@ -392,19 +409,22 @@ def advance_disease_pass(
     )
     assert indexed is not None
     mortality_ids = tuple(sorted(mortality, key=lambda item: item.value))
+    extra_recipients = tuple(sorted(extra_latent, key=lambda item: item.value))
     _LOG.debug(
         "disease_pass_complete tick=%s row_count=%s mortality_count=%s "
-        "eligible_count=%s",
+        "eligible_count=%s extra_latent_count=%s",
         tick,
         len(indexed),
         len(mortality_ids),
         len(eligible),
+        len(extra_recipients),
     )
     return DiseasePassResult(
         disease_state=indexed,
         bodies=MappingProxyType(bodies),
         mortality_body_ids=mortality_ids,
         start_rows=start_rows,
+        extra_latent_recipients=extra_recipients,
     )
 
 

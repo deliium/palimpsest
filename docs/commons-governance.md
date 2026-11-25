@@ -1,6 +1,6 @@
 # Commons governance
 
-[← Overexploitation](overexploitation.md) · [Back to README](../README.md) · [Configuration →](configuration.md)
+[← Overexploitation](overexploitation.md) · [Back to README](../README.md) · [Next Page →](disasters.md)
 
 Optional voluntary owner-scoped commons evidence under V4-38. Exact
 `runner-config-v62` plus `commons-governance.v1` let several agents share finite
@@ -23,9 +23,9 @@ physical admission, and zero autonomous emergence is a valid research outcome.
 | Disabled | Legacy v61/v60 bytes, event 29/`v27`, and equal-command objective behavior unchanged |
 
 Not claimed: policy authority, objective membership, turn scheduler, sanction
-executor, group actor, `/v1` routes, UI panels, Alembic migrations, new
-commands/events, or ownership of `disasters`. Research rosters and analytical
-cohorts never enter cognition.
+executor, group actor, `/v1` routes, UI panels, Alembic migrations, or new
+commands/events. Research rosters and analytical cohorts never enter cognition.
+Objective disasters are a separate owned channel (`docs/disasters.md`).
 
 ## Configuration
 

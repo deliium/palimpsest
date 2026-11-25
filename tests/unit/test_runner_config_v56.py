@@ -252,30 +252,12 @@ def test_matrix_finalize_rejects_v56_with_an_enabled_v4_flag() -> None:
     assert excinfo.value.code == "finalize_validation_failed"
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "flag_name",
-    (
-        "disasters",
-    ),
-)
-async def test_unowned_v4_flag_fails_closed_after_encode_decode(
-    flag_name: str,
-) -> None:
-    config = replace(
-        _base(),
-        schema_version=RUNNER_SCHEMA_VERSION_V56,
-        v4_capability_flags=V4CapabilityFlags(**{flag_name: True}),
-    )
-    decoded = decode_runner_config(encode_runner_config(config))
-    assert getattr(decoded.v4_capability_flags, flag_name) is True
+def test_all_v4_flags_are_owned_after_disasters() -> None:
+    from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
 
-    with pytest.raises(RunnerConstructionError) as excinfo:
-        await SimulationRunner.from_config(
-            config, run_id=RunId(f"run-v4-gate-{flag_name}")
-        )
-    assert excinfo.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
-    assert excinfo.value.stage == "v4_capability_flags"
+    assert "disasters" in V4_OWNED_CAPABILITY_FLAGS
+    assert V4CapabilityFlags(disasters=True).unimplemented_enabled_names() == ()
+    assert V4CapabilityFlags(disasters=True).owned_enabled_names() == ("disasters",)
 
 
 @pytest.mark.asyncio

@@ -192,14 +192,16 @@ def test_loop_constructor_slots_validation_and_updater_exist() -> None:
 
 def test_no_runner_v57_or_new_flag_key_exists() -> None:
     source = inspect.getsource(runner_module)
-    assert "runner-config-v63" not in source
+    assert "runner-config-v64" not in source
     assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "runner-config-v61" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "runner-config-v62" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v63" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert hasattr(runner_models_module, "RUNNER_SCHEMA_VERSION_V60")
     assert hasattr(runner_models_module, "RUNNER_SCHEMA_VERSION_V61")
     assert hasattr(runner_models_module, "RUNNER_SCHEMA_VERSION_V62")
-    assert not hasattr(runner_models_module, "RUNNER_SCHEMA_VERSION_V63")
+    assert hasattr(runner_models_module, "RUNNER_SCHEMA_VERSION_V63")
+    assert not hasattr(runner_models_module, "RUNNER_SCHEMA_VERSION_V64")
     names = set(V4CapabilityFlags.__dataclass_fields__)
     assert len(names) == 12
     assert not any("migration" in name or "displacement" in name for name in names)
@@ -224,15 +226,13 @@ def test_every_cognition_config_call_site_passes_the_migration_inputs() -> None:
     assert source.count("v3_capability_flags.multi_polity_migration") >= calls
 
 
-def test_existing_unowned_v4_flag_still_fails_closed() -> None:
+def test_all_v4_flags_including_disasters_are_owned() -> None:
     flags = V4CapabilityFlags(organizations=True)
     assert flags.unimplemented_enabled_names() == ()
-    for name in (
-        "disasters",
-    ):
-        unowned = V4CapabilityFlags(**{name: True})
-        assert unowned.unimplemented_enabled_names() == (name,)
-        assert getattr(flags, name) is False
+    disasters = V4CapabilityFlags(disasters=True)
+    assert disasters.owned_enabled_names() == ("disasters",)
+    assert disasters.unimplemented_enabled_names() == ()
+    assert flags.disasters is False
 
 
 def test_diplomacy_conflict_and_rules_are_not_required() -> None:

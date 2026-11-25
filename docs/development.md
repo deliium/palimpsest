@@ -677,6 +677,20 @@ See [Overexploitation](overexploitation.md). Disposable-DB durability for the
 ecology/overexploitation family is unexecuted when
 `PALIMPSEST_TEST_DATABASE_URL` is unset; that is not a pass.
 
+## Disasters verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_disaster_*.py \
+  tests/unit/test_v1_regression_gate.py \
+  tests/unit/test_v2_scientific_invariants.py \
+  tests/unit/test_v4_scaffolding_gate.py \
+  tests/unit/test_compatibility_matrix.py \
+  tests/unit/test_v4_versioning_reservations.py \
+  tests/architecture/test_v4_architecture_invariants.py -q
+```
+
+See [Disasters](disasters.md). No Alembic migration; head stays `0017`.
+
 ## Scientific-model verification
 
 ```bash

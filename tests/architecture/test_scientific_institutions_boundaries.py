@@ -106,4 +106,4 @@ def test_no_new_migration_or_version_surface() -> None:
     runner_models = (SRC / "simulation" / "runner_models.py").read_text(
         encoding="utf-8"
     )
-    assert "runner-config-v63" not in runner_models
+    assert "runner-config-v64" not in runner_models

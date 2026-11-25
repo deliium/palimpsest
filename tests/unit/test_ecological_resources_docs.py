@@ -58,8 +58,8 @@ def test_pins_and_example_decode() -> None:
     assert EVENT_SCHEMA_REPLAY_V25 == ECOLOGY_WRITE_PAIR_EVENT == 25
     assert ECOLOGY_WRITE_PAIR_CODEC == "v23"
     assert "ecological_feedback" in V4_OWNED_CAPABILITY_FLAGS
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
-    assert "disasters" not in V4_OWNED_CAPABILITY_FLAGS
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
+    assert "disasters" in V4_OWNED_CAPABILITY_FLAGS
     decoded = decode_ecological_resources(
         {
             "policy_id": ECOLOGICAL_RESOURCES_POLICY_ID,

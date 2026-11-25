@@ -92,9 +92,9 @@ def test_reuse_and_deepening_conflict_is_rejected() -> None:
 
 def test_unowned_deepening_context_is_rejected() -> None:
     pair = DeepeningWritePair(
-        context_id=V4ContextId.DISASTERS,
-        event_schema=28,
-        codec_version="v26",
+        context_id=V4ContextId.SOCIETAL_RESILIENCE,
+        event_schema=30,
+        codec_version="v28",
         reason="not owned",
     )
     with pytest.raises(ValueError, match="v4_deepening_pair_unowned_context"):

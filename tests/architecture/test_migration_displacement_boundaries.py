@@ -385,7 +385,7 @@ def test_exactly_six_get_routes_require_subjective_debug() -> None:
 def test_no_new_flag_context_or_v57() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -399,17 +399,18 @@ def test_no_new_flag_context_or_v57() -> None:
             "science",
             "epidemics",
         "ecological_feedback",
+        "disasters",
         }
     )
     offenders = [
         str(path.relative_to(ROOT / "src"))
         for path in sorted((ROOT / "src").rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v63" in path.read_text(encoding="utf-8")
+        and "runner-config-v64" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
     for path in MIGRATION_PATHS:
-        assert "runner-config-v63" not in path.read_text(encoding="utf-8")
+        assert "runner-config-v64" not in path.read_text(encoding="utf-8")
 
 
 def test_pins_are_unchanged() -> None:

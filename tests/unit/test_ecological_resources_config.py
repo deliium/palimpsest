@@ -218,7 +218,7 @@ def test_v60_is_supported_and_flag_owned() -> None:
     assert RUNNER_SCHEMA_VERSION_V60 == "runner-config-v60"
     assert RUNNER_SCHEMA_VERSION_V60 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "ecological_feedback" in V4_OWNED_CAPABILITY_FLAGS
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 12
 
 
 def test_spec_round_trip_and_digest() -> None:

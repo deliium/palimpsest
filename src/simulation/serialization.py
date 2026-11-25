@@ -187,6 +187,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V23,
     EVENT_SCHEMA_REPLAY_V24,
     EVENT_SCHEMA_REPLAY_V25,
+    EVENT_SCHEMA_REPLAY_V26,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
     EVENT_SCHEMA_REPLAY_V29,
@@ -208,6 +209,14 @@ from world.events import (
     CorpseCustodyOpened,
     CraftStarted,
     Died,
+    DisasterInfrastructureEffectRecord,
+    DisasterInfrastructureTargetView,
+    DisasterLocationTargetView,
+    DisasterOutcome,
+    DisasterResolved,
+    DisasterResourceTargetView,
+    DisasterStockEffectRecord,
+    DisasterSurgeEffectRecord,
     DiseaseRowView,
     DiseaseStateChanged,
     Dropped,
@@ -409,6 +418,7 @@ def required_domain_schema(value: object) -> int:
                 DiseaseStateChanged,
                 EcologicalResourceChanged,
                 ResourcePressureRecorded,
+                DisasterResolved,
             }
             else SCHEMA_VERSION
         )
@@ -5269,6 +5279,76 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "after_damage_tenths": after_damage_tenths,
                 "regenerated_tenths": regenerated_tenths,
             }
+        case DisasterResolved(
+            rule_id=rule_id,
+            disaster_kind=disaster_kind,
+            origin=origin,
+            target=target,
+            outcome=outcome,
+            effect=effect,
+        ):
+            from world.disasters import DisasterKind, DisasterOrigin
+
+            if type(target) is DisasterResourceTargetView:
+                target_payload: dict[str, object] = {
+                    "type": "resource",
+                    "resource_id": target.resource_id.value,
+                }
+            elif type(target) is DisasterInfrastructureTargetView:
+                target_payload = {
+                    "type": "infrastructure",
+                    "location_id": target.location_id.value,
+                    "endpoint_location_id": (
+                        None
+                        if target.endpoint_location_id is None
+                        else target.endpoint_location_id.value
+                    ),
+                    "infrastructure_kind": target.infrastructure_kind.value,
+                }
+            elif type(target) is DisasterLocationTargetView:
+                target_payload = {
+                    "type": "location",
+                    "location_id": target.location_id.value,
+                }
+            else:
+                raise DomainSerializationError("invalid_fields", "$.details.target")
+            if effect is None:
+                effect_payload: dict[str, object] | None = None
+            elif type(effect) is DisasterStockEffectRecord:
+                effect_payload = {
+                    "type": "stock",
+                    "quantity_before_tenths": effect.quantity_before_tenths,
+                    "quantity_after_tenths": effect.quantity_after_tenths,
+                    "damage_before_tenths": effect.damage_before_tenths,
+                    "damage_after_tenths": effect.damage_after_tenths,
+                }
+            elif type(effect) is DisasterInfrastructureEffectRecord:
+                effect_payload = {
+                    "type": "infrastructure",
+                    "asset_id": effect.asset_id.value,
+                }
+            elif type(effect) is DisasterSurgeEffectRecord:
+                effect_payload = {
+                    "type": "surge",
+                    "additional_latent_count": effect.additional_latent_count,
+                }
+            else:
+                raise DomainSerializationError("invalid_fields", "$.details.effect")
+            return {
+                "kind": "disaster_resolved",
+                "rule_id": rule_id,
+                "disaster_kind": disaster_kind.value
+                if type(disaster_kind) is DisasterKind
+                else str(disaster_kind),
+                "origin": origin.value
+                if type(origin) is DisasterOrigin
+                else str(origin),
+                "target": target_payload,
+                "outcome": outcome.value
+                if type(outcome) is DisasterOutcome
+                else str(outcome),
+                "effect": effect_payload,
+            }
         case Searched(
             target_id=target_id,
             success=success,
@@ -6769,7 +6849,10 @@ def _decode_event_details(
             )
 
         if kind == "ecological_resource_changed":
-            if schema_version != EVENT_SCHEMA_REPLAY_V25:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V25,
+                EVENT_SCHEMA_REPLAY_V26,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if set(fields) != {
                 "resource_id",
@@ -6790,7 +6873,10 @@ def _decode_event_details(
             )
 
         if kind == "resource_pressure_recorded":
-            if schema_version != EVENT_SCHEMA_REPLAY_V29:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V26,
+                EVENT_SCHEMA_REPLAY_V29,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             expected = {
                 "resource_id",
@@ -6826,10 +6912,127 @@ def _decode_event_details(
                 regenerated_tenths=_tenths("regenerated_tenths"),
             )
 
+        if kind == "disaster_resolved":
+            if schema_version != EVENT_SCHEMA_REPLAY_V26:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            if set(fields) != {
+                "rule_id",
+                "disaster_kind",
+                "origin",
+                "target",
+                "outcome",
+                "effect",
+            }:
+                raise DomainSerializationError("invalid_fields", path)
+            from world.disasters import DisasterKind, DisasterOrigin
+            from world.infrastructure import InfrastructureKind
+
+            raw_target = fields["target"]
+            if not isinstance(raw_target, dict):
+                raise DomainSerializationError("invalid_object", f"{path}.target")
+            target_type = raw_target.get("type")
+            if target_type == "resource":
+                if set(raw_target) != {"type", "resource_id"}:
+                    raise DomainSerializationError("invalid_fields", f"{path}.target")
+                decoded_target: object = DisasterResourceTargetView(
+                    resource_id=EntityId(
+                        _str_field(raw_target, "resource_id", path=f"{path}.target")
+                    )
+                )
+            elif target_type == "infrastructure":
+                if set(raw_target) != {
+                    "type",
+                    "location_id",
+                    "endpoint_location_id",
+                    "infrastructure_kind",
+                }:
+                    raise DomainSerializationError("invalid_fields", f"{path}.target")
+                endpoint = raw_target["endpoint_location_id"]
+                decoded_target = DisasterInfrastructureTargetView(
+                    location_id=EntityId(
+                        _str_field(raw_target, "location_id", path=f"{path}.target")
+                    ),
+                    endpoint_location_id=(
+                        None if endpoint is None else EntityId(str(endpoint))
+                    ),
+                    infrastructure_kind=InfrastructureKind(
+                        _str_field(
+                            raw_target, "infrastructure_kind", path=f"{path}.target"
+                        )
+                    ),
+                )
+            elif target_type == "location":
+                if set(raw_target) != {"type", "location_id"}:
+                    raise DomainSerializationError("invalid_fields", f"{path}.target")
+                decoded_target = DisasterLocationTargetView(
+                    location_id=EntityId(
+                        _str_field(raw_target, "location_id", path=f"{path}.target")
+                    )
+                )
+            else:
+                raise DomainSerializationError("invalid_fields", f"{path}.target")
+            raw_effect = fields["effect"]
+            if raw_effect is None:
+                decoded_effect: object | None = None
+            elif isinstance(raw_effect, dict):
+                effect_type = raw_effect.get("type")
+                if effect_type == "stock":
+                    if set(raw_effect) != {
+                        "type",
+                        "quantity_before_tenths",
+                        "quantity_after_tenths",
+                        "damage_before_tenths",
+                        "damage_after_tenths",
+                    }:
+                        raise DomainSerializationError(
+                            "invalid_fields", f"{path}.effect"
+                        )
+                    decoded_effect = DisasterStockEffectRecord(
+                        quantity_before_tenths=int(raw_effect["quantity_before_tenths"]),
+                        quantity_after_tenths=int(raw_effect["quantity_after_tenths"]),
+                        damage_before_tenths=int(raw_effect["damage_before_tenths"]),
+                        damage_after_tenths=int(raw_effect["damage_after_tenths"]),
+                    )
+                elif effect_type == "infrastructure":
+                    if set(raw_effect) != {"type", "asset_id"}:
+                        raise DomainSerializationError(
+                            "invalid_fields", f"{path}.effect"
+                        )
+                    decoded_effect = DisasterInfrastructureEffectRecord(
+                        asset_id=EntityId(
+                            _str_field(raw_effect, "asset_id", path=f"{path}.effect")
+                        )
+                    )
+                elif effect_type == "surge":
+                    if set(raw_effect) != {"type", "additional_latent_count"}:
+                        raise DomainSerializationError(
+                            "invalid_fields", f"{path}.effect"
+                        )
+                    decoded_effect = DisasterSurgeEffectRecord(
+                        additional_latent_count=int(
+                            raw_effect["additional_latent_count"]
+                        )
+                    )
+                else:
+                    raise DomainSerializationError("invalid_fields", f"{path}.effect")
+            else:
+                raise DomainSerializationError("invalid_object", f"{path}.effect")
+            return DisasterResolved(
+                rule_id=_str_field(fields, "rule_id", path=path),
+                disaster_kind=DisasterKind(
+                    _str_field(fields, "disaster_kind", path=path)
+                ),
+                origin=DisasterOrigin(_str_field(fields, "origin", path=path)),
+                target=decoded_target,  # type: ignore[arg-type]
+                outcome=DisasterOutcome(_str_field(fields, "outcome", path=path)),
+                effect=decoded_effect,  # type: ignore[arg-type]
+            )
+
         if kind == "route_condition_changed":
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V24,
                 EVENT_SCHEMA_REPLAY_V25,
+                EVENT_SCHEMA_REPLAY_V26,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
                 EVENT_SCHEMA_REPLAY_V29,
@@ -8327,18 +8530,30 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         if value.schema_version not in {
             EVENT_SCHEMA_REPLAY_V24,
             EVENT_SCHEMA_REPLAY_V25,
+            EVENT_SCHEMA_REPLAY_V26,
             EVENT_SCHEMA_REPLAY_V29,
         } or wire_schema != 2:
             raise DomainSerializationError(
                 "invalid_event_schema_version", "$.schema_version"
             )
     if details_kind == "ecological_resource_changed":
-        if value.schema_version != EVENT_SCHEMA_REPLAY_V25 or wire_schema != 2:
+        if value.schema_version not in {
+            EVENT_SCHEMA_REPLAY_V25,
+            EVENT_SCHEMA_REPLAY_V26,
+        } or wire_schema != 2:
             raise DomainSerializationError(
                 "invalid_event_schema_version", "$.schema_version"
             )
     if details_kind == "resource_pressure_recorded":
-        if value.schema_version != EVENT_SCHEMA_REPLAY_V29 or wire_schema != 2:
+        if value.schema_version not in {
+            EVENT_SCHEMA_REPLAY_V26,
+            EVENT_SCHEMA_REPLAY_V29,
+        } or wire_schema != 2:
+            raise DomainSerializationError(
+                "invalid_event_schema_version", "$.schema_version"
+            )
+    if details_kind == "disaster_resolved":
+        if value.schema_version != EVENT_SCHEMA_REPLAY_V26 or wire_schema != 2:
             raise DomainSerializationError(
                 "invalid_event_schema_version", "$.schema_version"
             )
@@ -8919,6 +9134,7 @@ def _decode_world_event(
             EVENT_SCHEMA_REPLAY_V23,
             EVENT_SCHEMA_REPLAY_V24,
             EVENT_SCHEMA_REPLAY_V25,
+            EVENT_SCHEMA_REPLAY_V26,
             EVENT_SCHEMA_REPLAY_V27,
             EVENT_SCHEMA_REPLAY_V28,
             EVENT_SCHEMA_REPLAY_V29,

@@ -63,12 +63,13 @@ def _imports(path: Path) -> set[str]:
 
 def test_owned_flags_include_infrastructure_and_stay_equal() -> None:
     assert COMPAT_OWNED == RUNNER_OWNED
-    assert len(COMPAT_OWNED) == 11
+    assert len(COMPAT_OWNED) == 12
     assert "infrastructure_networks" in COMPAT_OWNED
     assert "supply_chains" in COMPAT_OWNED
     unowned = set(V4_CAPABILITY_FLAGS) - set(COMPAT_OWNED)
-    assert len(unowned) == 1
+    assert len(unowned) == 0
     assert "supply_chains" not in unowned
+    assert "disasters" not in unowned
 
 
 def test_wire_pins_for_infrastructure_landing() -> None:

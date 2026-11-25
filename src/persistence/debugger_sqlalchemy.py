@@ -140,7 +140,7 @@ class SqlAlchemyDebuggerEventLookup:
                 )
             )
             row = result.scalar_one_or_none()
-            if row is None:
+            if row is None or row.event_type == "disaster_resolved":
                 _LOGGER.warning(
                     "debugger_event_lookup",
                     reason_code="event_not_found",
@@ -162,7 +162,7 @@ class SqlAlchemyDebuggerEventLookup:
         )
         async with session_scope(self._session_factory) as session:
             row = await session.get(WorldEventOrm, (run_id.value, tick, sequence))
-            if row is None:
+            if row is None or row.event_type == "disaster_resolved":
                 _LOGGER.warning(
                     "debugger_event_lookup",
                     reason_code="event_not_found",

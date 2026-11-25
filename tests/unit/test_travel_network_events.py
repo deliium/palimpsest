@@ -142,11 +142,13 @@ def test_route_event_requires_v27() -> None:
     assert event.target_id is None
     assert event.occurrence is not None
     assert event.occurrence.affected_entity_ids == (A, B)
-    for version in (EVENT_SCHEMA_REPLAY_V23, 26):
-        with pytest.raises(
-            ValueError, match=EventValidationCode.INVALID_SCHEMA_VERSION.value
-        ):
-            _event(_detail(), version)
+    # Event 26 may carry travel when disasters compose with travel_network.
+    composed = _event(_detail(), 26)
+    assert composed.schema_version == 26
+    with pytest.raises(
+        ValueError, match=EventValidationCode.INVALID_SCHEMA_VERSION.value
+    ):
+        _event(_detail(), EVENT_SCHEMA_REPLAY_V23)
 
 
 def test_legacy_infrastructure_event_is_valid_under_v27() -> None:

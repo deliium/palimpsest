@@ -71,6 +71,7 @@ class SystemEffectFamily(StrEnum):
     COLLECTIVE_PROJECT = "collective_project"
     TRAVEL = "travel"
     DISEASE = "disease"
+    DISASTER = "disaster"
 
 
 @dataclass(frozen=True, slots=True)

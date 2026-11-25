@@ -91,6 +91,7 @@ from experiments.catalog import (
     experiment_competing_theories,
     experiment_credit_relationships,
     experiment_d_drives,
+    experiment_disasters,
     experiment_disease_mechanics,
     experiment_e_false_story,
     experiment_emergent_prices,
@@ -289,6 +290,11 @@ from experiments.delegation_representation_publication import (
     build_representation_harvest_result,
     publish_representation_snapshot,
     representations_publication_document,
+)
+from experiments.disaster_scenario import (
+    DISASTERS_EXPERIMENT_ID,
+    bind_disasters_experiment_runner,
+    disasters_scenario,
 )
 from experiments.disease_scenario import (
     DISEASE_MECHANICS_EXPERIMENT_ID,
@@ -617,6 +623,7 @@ __all__ = [
     "DEFAULT_SMOKE_TICK_BUDGET",
     "DEFAULT_SUCCESS_STOP_REASONS",
     "DESCRIPTIVE_METHOD",
+    "DISASTERS_EXPERIMENT_ID",
     "DISEASE_MECHANICS_EXPERIMENT_ID",
     "ECONOMIC_CASCADES_EXPERIMENT_ID",
     "EMERGENT_PRICES_EXPERIMENT_ID",
@@ -808,6 +815,7 @@ __all__ = [
     "assert_comparable_generational_pair",
     "assert_v3_benchmark_build_comparable",
     "benchmark_suite_registry",
+    "bind_disasters_experiment_runner",
     "bounded_experimentation_profile",
     "build_accounting_ledgers_harvest_result",
     "build_completed_run_accounting_ledgers_analysis",
@@ -892,6 +900,7 @@ __all__ = [
     "dependency_caregiving_profile",
     "developmental_learning_profile",
     "developmental_stages_profile",
+    "disasters_scenario",
     "disease_mechanics_scenario",
     "dispute_publication_document",
     "distributed_reputation_scenario",
@@ -954,6 +963,7 @@ __all__ = [
     "experiment_competing_theories",
     "experiment_credit_relationships",
     "experiment_d_drives",
+    "experiment_disasters",
     "experiment_disease_mechanics",
     "experiment_e_false_story",
     "experiment_emergent_prices",

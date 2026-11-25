@@ -75,6 +75,7 @@ class SqlAlchemyObjectiveEvidenceLoader:
         after: EventKeysetCursor | None = None,
         limit: int = DEFAULT_INSPECTION_PAGE_SIZE,
         manifest: EvidenceManifest | None = None,
+        exclude_event_types: frozenset[str] | set[str] | None = None,
     ) -> InspectionEventPage:
         run_id = RunId(run_id).value
         limit = clamp_inspection_page_limit(limit)
@@ -161,6 +162,12 @@ class SqlAlchemyObjectiveEvidenceLoader:
                 .order_by(WorldEventOrm.tick, WorldEventOrm.sequence)
                 .limit(limit + 1)
             )
+            if exclude_event_types:
+                excluded = frozenset(exclude_event_types)
+                if excluded:
+                    stmt = stmt.where(
+                        WorldEventOrm.event_type.not_in(tuple(sorted(excluded)))
+                    )
             if through_tick is not None:
                 stmt = stmt.where(WorldEventOrm.tick <= through_tick)
             rows = list((await session.execute(stmt)).scalars().all())

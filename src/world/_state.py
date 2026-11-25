@@ -6,6 +6,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
+from world._disasters import DisasterState, require_disaster_state
 from world._disease import DiseaseConditionRow, index_disease_state
 from world._ecological_resources import (
     EcologicalStockRow,
@@ -81,6 +82,8 @@ def rebuild_world_state(
     | None = None,
     ecological_policy_digest: str | None = None,
     replace_ecological_resources: bool = False,
+    disaster_state: DisasterState | None = None,
+    replace_disaster_state: bool = False,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -167,6 +170,12 @@ def rebuild_world_state(
             if ecological_policy_digest is None
             else ecological_policy_digest
         )
+    if replace_disaster_state:
+        disaster_src: DisasterState | None = disaster_state
+    else:
+        disaster_src = (
+            state.disaster_state if disaster_state is None else disaster_state
+        )
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -243,6 +252,7 @@ def rebuild_world_state(
         disease_require_living=False,
         ecological_resources=ecological_src,
         ecological_policy_digest=ecological_digest_src,
+        disaster_state=disaster_src,
     )
 
 
@@ -463,6 +473,7 @@ class WorldState:
         "_bodies",
         "_collective_projects",
         "_corpse_custody_item_ids",
+        "_disaster_state",
         "_disease_state",
         "_ecological_policy_digest",
         "_ecological_resources",
@@ -520,6 +531,7 @@ class WorldState:
         | Sequence[EcologicalStockRow]
         | None = None,
         ecological_policy_digest: str | None = None,
+        disaster_state: DisasterState | None = None,
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -647,6 +659,10 @@ class WorldState:
                     "(code=ecological_digest_invalid)"
                 )
             self._ecological_policy_digest = ecological_policy_digest
+        if disaster_state is None:
+            self._disaster_state = None
+        else:
+            self._disaster_state = require_disaster_state(disaster_state)
         if (
             regions_migration is not None
             and type(regions_migration) is not RegionsMigrationSpec
@@ -803,6 +819,11 @@ class WorldState:
     def ecological_policy_digest(self) -> str | None:
         """Canonical ecology policy digest while the channel is active."""
         return self._ecological_policy_digest
+
+    @property
+    def disaster_state(self) -> DisasterState | None:
+        """Private disaster ledger; ``None`` means the disasters channel is off."""
+        return self._disaster_state
 
     def route_condition(
         self, origin_id: EntityId, destination_id: EntityId

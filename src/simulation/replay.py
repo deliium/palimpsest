@@ -690,12 +690,14 @@ class ReplayService:
                 kinship_spec=request.kinship_spec,
                 disease_mechanics=request.disease_mechanics,
                 ecological_resources=request.ecological_resources,
+                disasters=request.disasters,
             )
         except ValueError as exc:
             if str(exc) in {
                 "disease_policy_mismatch",
                 "ecology_policy_mismatch",
                 "ecology_environment_mismatch",
+                "disaster_policy_mismatch",
             }:
                 _LOGGER.error(
                     "%s code=%s run_id=%s",
@@ -751,11 +753,14 @@ class ReplayService:
         disease_policy_bound = engine._disease_mechanics is not None
         ecology_channel = getattr(snapshot, "ecological_resources", None) is not None
         ecology_policy_bound = engine._ecological_resources is not None
+        disaster_channel = getattr(snapshot, "disaster_state", None) is not None
+        disaster_policy_bound = engine._disasters is not None
         mode = (
             ReplayMode.CONTINUATION
             if target_tick == head_next
             and (not disease_channel or disease_policy_bound)
             and (not ecology_channel or ecology_policy_bound)
+            and (not disaster_channel or disaster_policy_bound)
             else ReplayMode.READONLY
         )
         predecessor = (
@@ -814,6 +819,11 @@ class ReplayService:
             and outcome.engine._ecological_resources is None
         ):
             raise RuntimeError("open_durable requires ecology policy")
+        disaster_state = getattr(
+            outcome.engine._snapshot.world.state, "disaster_state", None
+        )
+        if disaster_state is not None and outcome.engine._disasters is None:
+            raise RuntimeError("open_durable requires disaster policy")
         return PersistentSimulationService(
             outcome.engine,
             journal,
@@ -1238,12 +1248,14 @@ class ReplayService:
                 kinship_spec=request.kinship_spec,
                 disease_mechanics=request.disease_mechanics,
                 ecological_resources=request.ecological_resources,
+                disasters=request.disasters,
             )
         except ValueError as exc:
             if str(exc) in {
                 "disease_policy_mismatch",
                 "ecology_policy_mismatch",
                 "ecology_environment_mismatch",
+                "disaster_policy_mismatch",
             }:
                 _LOGGER.error(
                     "%s code=%s run_id=%s",
@@ -1304,11 +1316,14 @@ class ReplayService:
         disease_policy_bound = engine._disease_mechanics is not None
         ecology_channel = getattr(snapshot, "ecological_resources", None) is not None
         ecology_policy_bound = engine._ecological_resources is not None
+        disaster_channel = getattr(snapshot, "disaster_state", None) is not None
+        disaster_policy_bound = engine._disasters is not None
         mode = (
             ReplayMode.CONTINUATION
             if target_tick == head_next
             and (not disease_channel or disease_policy_bound)
             and (not ecology_channel or ecology_policy_bound)
+            and (not disaster_channel or disaster_policy_bound)
             else ReplayMode.READONLY
         )
         predecessor = (

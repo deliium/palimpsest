@@ -147,8 +147,9 @@ def test_science_requires_v56(schema_version: str) -> None:
         )
 
 
-def test_science_is_owned_and_one_flag_remains_unowned() -> None:
+def test_science_is_owned_and_no_flag_remains_unowned() -> None:
     assert "science" in V4_OWNED_CAPABILITY_FLAGS
+    assert "disasters" in V4_OWNED_CAPABILITY_FLAGS
     unowned = {
         name
         for name in (
@@ -167,7 +168,7 @@ def test_science_is_owned_and_one_flag_remains_unowned() -> None:
         )
         if name not in V4_OWNED_CAPABILITY_FLAGS
     }
-    assert unowned == {"disasters"}
+    assert unowned == set()
 
 
 def test_science_off_is_byte_identical() -> None:

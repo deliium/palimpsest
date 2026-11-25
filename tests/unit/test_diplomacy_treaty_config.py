@@ -20,8 +20,6 @@ from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
 from simulation.models import RunId
 from simulation.runner import (
-    RunnerConstructionError,
-    RunnerConstructionErrorCode,
     SimulationRunner,
     _cognition_config_for,
 )
@@ -130,21 +128,16 @@ async def test_diplomacy_runs_without_organizations() -> None:
     assert runner.config.v4_capability_flags.enabled_names() == ("diplomacy",)
 
 
-@pytest.mark.asyncio
-async def test_unowned_v4_flag_still_fails_closed() -> None:
-    config = _v56_config(flags=V4CapabilityFlags(disasters=True))
-    with pytest.raises(RunnerConstructionError) as exc:
-        await SimulationRunner.from_config(
-            config, run_id=RunId("run-v4-treaty-unowned")
-        )
-    assert exc.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
-    assert exc.value.stage == "v4_capability_flags"
+def test_disasters_flag_is_owned() -> None:
+    flags = V4CapabilityFlags(disasters=True)
+    assert flags.owned_enabled_names() == ("disasters",)
+    assert flags.unimplemented_enabled_names() == ()
 
 
 def test_no_v57_runner_schema_exists() -> None:
     source_root = Path(__file__).resolve().parents[2] / "src"
     for path in source_root.rglob("*.py"):
-        assert "runner-config-v63" not in path.read_text(encoding="utf-8")
+        assert "runner-config-v64" not in path.read_text(encoding="utf-8")
 
 
 def test_no_treaty_key_exists_in_runner_or_agent_specs() -> None:

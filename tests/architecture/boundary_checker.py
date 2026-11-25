@@ -102,6 +102,7 @@ PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(
         "world._measurement",
         "world._disease",
         "world._ecological_resources",
+        "world._disasters",
     }
 )
 PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
@@ -119,8 +120,12 @@ PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
         "world._measurement",
         "world._disease",
         "world._ecological_resources",
+        "world._disasters",
         "simulation.engine",
         "simulation.bootstrap",
+        "simulation.runner",
+        "simulation.disasters_resolve",
+        "simulation.disasters_checkpoint",
     }
 )
 

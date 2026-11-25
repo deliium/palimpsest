@@ -51,6 +51,7 @@ _EXPECTED_OWNED = frozenset(
         "science",
             "epidemics",
     "ecological_feedback",
+    "disasters",
     }
 )
 

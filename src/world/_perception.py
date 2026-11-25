@@ -44,6 +44,7 @@ from world.events import (
     ContactRecorded,
     CorpseCustodyOpened,
     CraftStarted,
+    DisasterResolved,
     DiseaseStateChanged,
     EcologicalResourceChanged,
     ExchangeCompleted,
@@ -1092,6 +1093,11 @@ def _project_event_window(
         if type(event.details) is ResourcePressureRecorded:
             _LOG.debug(
                 "overexploitation_occurrence_suppressed reason_code=private_transition"
+            )
+            continue
+        if type(event.details) is DisasterResolved:
+            _LOG.debug(
+                "disaster_occurrence_suppressed reason_code=private_transition"
             )
             continue
         if not subjective_valuation_active and type(event.details) in {

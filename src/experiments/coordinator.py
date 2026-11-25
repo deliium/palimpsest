@@ -268,6 +268,22 @@ class ExperimentCoordinator:
                             assignment.condition_id, assignment.runner_config
                         )
                     )
+                if assignment.experiment_id == "disasters@1":
+                    from experiments.disaster_scenario import (
+                        bind_disasters_experiment_runner,
+                        disasters_arbiter,
+                    )
+
+                    runner.set_intervention_arbiter(
+                        disasters_arbiter(
+                            assignment.condition_id,
+                            assignment.runner_config,
+                            run_id=assignment.run_id,
+                        )
+                    )
+                    bind_disasters_experiment_runner(
+                        runner, assignment.runner_config
+                    )
                 if self._intervention is not None and assignment.condition_id.endswith(
                     "intervention"
                 ):
