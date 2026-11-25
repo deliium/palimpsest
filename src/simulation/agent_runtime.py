@@ -5487,6 +5487,128 @@ class AgentRuntime:
             decay_enabled=enabled("_institutional_decay_mode"),
         )
 
+    def export_resilience_owner_keys(
+        self, *, body_id: str, living: bool
+    ) -> object:
+        """Project allowlisted institution/knowledge keys for resilience capture.
+
+        Proven dead owners must not call this exporter. Lane states are ``off``,
+        ``complete`` (including fresh-empty), or ``unsupported``.
+        """
+
+        from agents.cognition.institution_concepts import (
+            InstitutionConceptLedger,
+            InstitutionConceptStatus,
+        )
+        from agents.cognition.practical_knowledge import PracticalKnowledgeLedger
+        from simulation.cultural_evidence import (
+            CULTURAL_EVIDENCE_BASIS_FRESH_EMPTY,
+            CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE,
+            CULTURAL_EVIDENCE_COVERAGE_COMPLETE,
+            CULTURAL_EVIDENCE_COVERAGE_DISABLED,
+            CULTURAL_EVIDENCE_COVERAGE_MISSING,
+        )
+        from simulation.resilience_evidence import (
+            OwnerLaneState,
+            ResilienceOwnerKeys,
+        )
+
+        if type(living) is not bool:
+            raise TypeError("living must be bool")
+        if type(body_id) is not str or not body_id:
+            raise TypeError("body_id must be a non-empty str")
+
+        def institution_enabled() -> bool:
+            if self._retired is not None:
+                from simulation.retired_owners import RetiredOwnerRecord
+
+                assert type(self._retired) is RetiredOwnerRecord
+                return dict(self._retired.civilization_enabled).get(
+                    "_institution_concept_mode", False
+                )
+            return getattr(
+                getattr(self._loop, "_institution_concept_mode", None),
+                "value",
+                None,
+            ) == "deterministic"
+
+        knowledge_export = self._cultural_channel_export(
+            CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE
+        )
+        if knowledge_export.coverage == CULTURAL_EVIDENCE_COVERAGE_DISABLED:
+            knowledge_state = OwnerLaneState.OFF
+            active_keys: tuple[str, ...] = ()
+        elif knowledge_export.coverage == CULTURAL_EVIDENCE_COVERAGE_MISSING:
+            knowledge_state = OwnerLaneState.UNSUPPORTED
+            active_keys = ()
+        elif knowledge_export.coverage == CULTURAL_EVIDENCE_COVERAGE_COMPLETE:
+            knowledge_state = OwnerLaneState.COMPLETE
+            ledger = knowledge_export.ledger
+            if ledger is None:
+                if knowledge_export.basis != CULTURAL_EVIDENCE_BASIS_FRESH_EMPTY:
+                    knowledge_state = OwnerLaneState.UNSUPPORTED
+                    active_keys = ()
+                else:
+                    active_keys = ()
+            else:
+                if type(ledger) is not PracticalKnowledgeLedger:
+                    raise TypeError(
+                        "practical_knowledge must be PracticalKnowledgeLedger"
+                    )
+                if ledger.owner_id != self._agent.agent_id:
+                    raise ValueError("practical_knowledge_owner_mismatch")
+                active_keys = tuple(
+                    sorted(
+                        {
+                            entry.content_key
+                            for entry in ledger.entries
+                            if entry.active
+                        }
+                    )
+                )
+        else:
+            knowledge_state = OwnerLaneState.UNSUPPORTED
+            active_keys = ()
+
+        if not institution_enabled():
+            institution_state = OwnerLaneState.OFF
+            concept_ids: tuple[str, ...] = ()
+        else:
+            concepts = self._institution_concepts
+            if concepts is None:
+                # Fresh-empty only before the first executed update.
+                if len(self._processed_invocations) == 0:
+                    institution_state = OwnerLaneState.COMPLETE
+                    concept_ids = ()
+                else:
+                    institution_state = OwnerLaneState.UNSUPPORTED
+                    concept_ids = ()
+            else:
+                if type(concepts) is not InstitutionConceptLedger:
+                    raise TypeError(
+                        "institution_concepts must be InstitutionConceptLedger"
+                    )
+                if concepts.owner_id != self._agent.agent_id:
+                    raise ValueError("institution_concepts_owner_mismatch")
+                institution_state = OwnerLaneState.COMPLETE
+                concept_ids = tuple(
+                    sorted(
+                        concept.concept_id
+                        for concept in concepts.concepts
+                        if concept.status is InstitutionConceptStatus.RECOGNIZED
+                    )
+                )
+
+        return ResilienceOwnerKeys(
+            agent_id=self._agent.agent_id.value,
+            body_id=body_id,
+            living=living,
+            institution_state=institution_state,
+            knowledge_state=knowledge_state,
+            recognized_concept_ids=concept_ids,
+            active_content_keys=active_keys,
+        )
+
     def export_cultural_narratives(self) -> object | None:
         """Return this owner's carried narrative ledger, or None when off."""
         ledger = self._cultural_narratives

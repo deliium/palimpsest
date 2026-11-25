@@ -2427,6 +2427,12 @@ class WorldEngine:
     def tick(self) -> Tick:
         return self._snapshot.tick
 
+    @property
+    def history_length(self) -> int:
+        """Read-only committed event-history length for research capture."""
+
+        return len(self._snapshot.event_history)
+
     def restore_runtime_cursor(self, *, next_tick: int) -> None:
         """Restore the engine tick cursor after runtime-checkpoint rehydration.
 
@@ -3907,6 +3913,34 @@ class WorldEngine:
             revision=self.revision.value,
             bodies=self.detached_bodies(),
         )
+
+    def detached_ecological_capacities(self) -> Mapping[EntityId, int] | None:
+        """Project managed-stock effective capacity without re-folding pressure.
+
+        ``None`` means the ecology channel is off. An empty mapping is rejected
+        upstream at bootstrap; callers treat present-empty as enabled-empty.
+        """
+
+        from types import MappingProxyType
+
+        from world._ecological_resources import effective_capacity_tenths
+        from world.values import round_physical
+
+        rows = self._snapshot.world.state.ecological_resources
+        if rows is None:
+            return None
+        resources = self._snapshot.world.state.resources
+        capacities: dict[EntityId, int] = {}
+        for stock_id, row in sorted(rows.items(), key=lambda item: item[0].value):
+            resource = resources.get(stock_id)
+            if resource is None:
+                raise ValueError("ecological_capacity_resource_missing")
+            rounded = round_physical(resource.maximum_quantity)
+            baseline = round(rounded * 10.0)
+            capacities[stock_id] = effective_capacity_tenths(
+                row, baseline_tenths=baseline
+            )
+        return MappingProxyType(capacities)
 
     def _observation_context(self, *, tick: int, rules: object) -> ObservationContext:
         lifecycle_by_body = None

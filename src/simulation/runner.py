@@ -5088,15 +5088,11 @@ class SimulationRunner:
             len(self._runtimes),
         )
 
-    async def _detached_boundary_inputs(
+    async def _assert_finalized_boundary_ready(
         self, *, allow_terminal: bool = False
-    ) -> _DetachedBoundaryInputs:
-        """Assemble detached boundary inputs without capturing a fork checkpoint.
+    ) -> None:
+        """Shared finalized-boundary guards for fork and research exports."""
 
-        ``allow_terminal=False`` preserves every strict fork guard. Terminal
-        research inspection still requires agreed cursors and complete owner
-        finalization/publication; it never weakens fork eligibility.
-        """
         if not self._started:
             raise ForkCheckpointError(
                 "fork_boundary_not_finalized", "runner is not initialized"
@@ -5161,6 +5157,17 @@ class SimulationRunner:
             raise ForkCheckpointError(
                 "fork_boundary_not_finalized", "cultural baseline is not published"
             )
+
+    async def _detached_boundary_inputs(
+        self, *, allow_terminal: bool = False
+    ) -> _DetachedBoundaryInputs:
+        """Assemble detached boundary inputs without capturing a fork checkpoint.
+
+        ``allow_terminal=False`` preserves every strict fork guard. Terminal
+        research inspection still requires agreed cursors and complete owner
+        finalization/publication; it never weakens fork eligibility.
+        """
+        await self._assert_finalized_boundary_ready(allow_terminal=allow_terminal)
         runtime_states = tuple(
             runtime.export_fork_state() for runtime in self._runtimes
         )
@@ -5358,6 +5365,207 @@ class SimulationRunner:
             len(events),
         )
         return boundary
+
+    async def export_resilience_boundary(self) -> object:
+        """Export a narrow resilience witness at a finalized boundary.
+
+        Inspect-only: never advances ticks, installs sinks, or returns a
+        ``WorldSnapshot`` / raw ledger.
+        """
+
+        from world.models import LifeStatus
+
+        from simulation.resilience_evidence import (
+            MAX_RESILIENCE_FRAME_ROWS,
+            MAX_RESILIENCE_INFRASTRUCTURE_ASSETS,
+            MAX_RESILIENCE_MANAGED_STOCKS,
+            MAX_RESILIENCE_ROSTER,
+            OwnerLaneState,
+            ResilienceBodyRow,
+            ResilienceBoundaryFacts,
+            ResilienceEvidenceError,
+            ResilienceInfrastructureRow,
+            ResilienceStockRow,
+            count_normalized_rows,
+            quantity_tenths,
+        )
+
+        await self._assert_finalized_boundary_ready(allow_terminal=True)
+        boundary_tick = self._ticks_committed
+        if boundary_tick > 0:
+            preceding = next(
+                (
+                    receipt
+                    for receipt in self._finalized_tick_receipts
+                    if receipt.resulting_tick == boundary_tick
+                ),
+                None,
+            )
+            if preceding is None:
+                raise ResilienceEvidenceError("resilience_evidence_receipt_missing")
+        else:
+            preceding = None
+
+        registrations = self._engine.ordered_registrations
+        if len(registrations) > MAX_RESILIENCE_ROSTER:
+            raise ResilienceEvidenceError("resilience_evidence_roster_overflow")
+
+        live_hash = objective_projection_hash(
+            self._engine.detached_objective_projection()
+        )
+        if boundary_tick == 0:
+            body_hash: str | None = None
+        else:
+            assert preceding is not None
+            if live_hash != preceding.objective_state_hash:
+                raise ResilienceEvidenceError("resilience_evidence_body_hash_mismatch")
+            body_hash = live_hash
+
+        snapshot = _engine_snapshot(
+            self._engine,
+            snapshot_id=SnapshotId(
+                f"resilience-{self._run_id.value}-t{boundary_tick}"
+            ),
+            next_tick=Tick(boundary_tick),
+        )
+        try:
+            location_regions: dict[str, str] = {}
+            region_spec = snapshot.regions_migration
+            if region_spec is not None:
+                for membership in region_spec.location_regions:
+                    location_regions[membership.location_id.value] = membership.region_id
+
+            body_by_id = {body.entity_id: body for body in snapshot.bodies}
+            runtime_by_agent = {
+                runtime.agent_id: runtime for runtime in self._runtimes
+            }
+
+            body_rows: list[ResilienceBodyRow] = []
+            for registration in sorted(
+                registrations, key=lambda item: item.entity_id.value
+            ):
+                body = body_by_id.get(registration.entity_id)
+                if body is None:
+                    raise ResilienceEvidenceError("resilience_evidence_invalid_input")
+                living = body.life_status is LifeStatus.ALIVE
+                region_id = location_regions.get(body.location_id.value)
+                body_rows.append(
+                    ResilienceBodyRow(
+                        body_id=body.entity_id.value,
+                        agent_id=registration.agent_id.value,
+                        living=living,
+                        held_item_count=len(body.inventory),
+                        region_id=region_id,
+                    )
+                )
+
+            capacities = self._engine.detached_ecological_capacities()
+            if capacities is None:
+                ecology_channel = OwnerLaneState.OFF
+                stock_rows: tuple[ResilienceStockRow, ...] = ()
+            else:
+                ecology_channel = OwnerLaneState.COMPLETE
+                resource_by_id = {
+                    resource.entity_id: resource for resource in snapshot.resources
+                }
+                if len(capacities) > MAX_RESILIENCE_MANAGED_STOCKS:
+                    raise ResilienceEvidenceError("resilience_evidence_stock_overflow")
+                built_stocks: list[ResilienceStockRow] = []
+                for stock_id, capacity in capacities.items():
+                    resource = resource_by_id.get(stock_id)
+                    if resource is None:
+                        raise ResilienceEvidenceError(
+                            "resilience_evidence_invalid_input"
+                        )
+                    built_stocks.append(
+                        ResilienceStockRow(
+                            stock_id=stock_id.value,
+                            resource_kind=resource.kind.value,
+                            unit=resource.unit,
+                            quantity_tenths=quantity_tenths(resource.quantity),
+                            effective_capacity_tenths=capacity,
+                        )
+                    )
+                stock_rows = tuple(built_stocks)
+
+            if not self._engine.infrastructure_networks_active:
+                infrastructure_channel = OwnerLaneState.OFF
+                infra_rows: tuple[ResilienceInfrastructureRow, ...] = ()
+            else:
+                infrastructure_channel = OwnerLaneState.COMPLETE
+                assets = snapshot.infrastructure or ()
+                if len(assets) > MAX_RESILIENCE_INFRASTRUCTURE_ASSETS:
+                    raise ResilienceEvidenceError("resilience_evidence_infra_overflow")
+                infra_rows = tuple(
+                    ResilienceInfrastructureRow(
+                        asset_id=asset.asset_id.value,
+                        kind=asset.kind.value,
+                        location_id=asset.location_id.value,
+                        endpoint_location_id=(
+                            None
+                            if asset.endpoint_location_id is None
+                            else asset.endpoint_location_id.value
+                        ),
+                        status=asset.status.value,
+                    )
+                    for asset in sorted(assets, key=lambda item: item.asset_id.value)
+                )
+
+            from agents.models import AgentId
+
+            owner_rows = []
+            for body_row in body_rows:
+                if not body_row.living:
+                    continue
+                runtime = runtime_by_agent.get(AgentId(body_row.agent_id))
+                if runtime is None:
+                    # Missing living runtime is not death; keep the body row and
+                    # omit owner keys rather than inventing a dead owner.
+                    continue
+                if runtime.status is AgentRuntimeStatus.TERMINAL:
+                    continue
+                owner_rows.append(
+                    runtime.export_resilience_owner_keys(
+                        body_id=body_row.body_id, living=True
+                    )
+                )
+            owners = tuple(owner_rows)
+            total = count_normalized_rows(
+                bodies=tuple(body_rows),
+                stocks=stock_rows,
+                infrastructure=infra_rows,
+                owners=owners,
+            )
+            if total > MAX_RESILIENCE_FRAME_ROWS:
+                raise ResilienceEvidenceError("resilience_evidence_frame_overflow")
+            facts = ResilienceBoundaryFacts(
+                run_id=self._run_id.value,
+                config_fingerprint=runner_config_fingerprint(self._config),
+                boundary_tick=boundary_tick,
+                revision=self._engine.revision.value,
+                body_projection_hash=body_hash,
+                history_length=self._engine.history_length,
+                infrastructure_channel=infrastructure_channel,
+                ecology_channel=ecology_channel,
+                bodies=tuple(body_rows),
+                stocks=stock_rows,
+                infrastructure=infra_rows,
+                owners=owners,
+            )
+        finally:
+            del snapshot
+
+        _LOG.debug(
+            "resilience_boundary_exported run_id=%s boundary_tick=%s "
+            "body_count=%s stock_count=%s infra_count=%s owner_count=%s",
+            facts.run_id,
+            facts.boundary_tick,
+            len(facts.bodies),
+            len(facts.stocks),
+            len(facts.infrastructure),
+            len(facts.owners),
+        )
+        return facts
 
     def export_runtime_checkpoint(self) -> RunnerRuntimeCheckpoint:
         """Export rehydratable runner state (no subjective payloads)."""
